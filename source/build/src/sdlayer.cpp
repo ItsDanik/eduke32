@@ -89,7 +89,7 @@ int misterStickDpad = 1;
 // Drawing ahead, decided by benchmark (CLAUDE.md of EDuke32_MiSTer).
 // MISTER_HYBRID_AHEAD=0 in the environment: every frame shown at the next
 // field, for comparing.
-#define MISTER_DRAW_AHEAD 1
+#define MISTER_DRAW_AHEAD 0
 static int misterAhead;
 static uint32_t misterTarget;
 static int misterTargetValid;
