@@ -29,6 +29,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "multivoc.h"
 #include "sndcards.h"
 
+#ifdef MISTER_HYBRID
+#include "driver_misterfm.h"
+#endif
+
 int MUSIC_ErrorCode = MUSIC_Ok;
 
 static midifuncs MUSIC_MidiFunctions;
@@ -56,7 +60,12 @@ int MUSIC_Init(int SoundCard)
     {
 redetect:
         detected++;
+#ifdef MISTER_HYBRID
+        // the core's FM chip; the emulated one with a core without it
+        SoundCard = detected < 2 ? ASS_MisterFM : ASS_OPL3;
+#else
         SoundCard = ASS_OPL3;
+#endif
     }
 
 
@@ -87,7 +96,11 @@ failed:
 
     if (status != MUSIC_Ok)
     {
+#ifdef MISTER_HYBRID
+        if (detected < 3)
+#else
         if (detected < 2)
+#endif
             goto redetect;
 
         goto failed;
@@ -128,6 +141,12 @@ int MUSIC_PlaySong(char *song, int songsize, int loopflag, const char *fn /*= nu
     UNREFERENCED_PARAMETER(fn);
 
     MUSIC_SetErrorCode(MUSIC_Ok)
+
+#ifdef MISTER_HYBRID
+    // where the song goes, and so which of its tracks (EMIDI)
+    if (ASS_MIDISoundDriver == ASS_MisterFM)
+        MisterFMDrv_SongStart();
+#endif
 
     if (MIDI_PlaySong(song, loopflag) != MIDI_Ok)
     {

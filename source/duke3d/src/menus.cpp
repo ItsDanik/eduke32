@@ -1236,7 +1236,7 @@ static MenuEntry_t ME_SAVE_NEW = MAKE_MENUENTRY( s_NewSaveGame, &MF_Minifont, &M
 static MenuEntry_t *ME_SAVE;
 static MenuEntry_t **MEL_SAVE;
 
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
 static int32_t alsadevice;
 static std::vector<alsa_mididevinfo_t> alsadevices;
 #endif
@@ -1294,7 +1294,7 @@ static MenuEntry_t  ME_SOUND_EXTMUSIC  = MAKE_MENUENTRY("Load OGG/FLAC music:", 
 static MenuRangeInt32_t MEO_SOUND_NUMVOICES = MAKE_MENURANGE( &soundvoices, &MF_Redfont, 16, 128, 0, 8, DisplayTypeInteger );
 static MenuEntry_t ME_SOUND_NUMVOICES = MAKE_MENUENTRY( "Voices:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_SOUND_NUMVOICES, RangeInt32 );
 
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
 static char const *MEOSN_SOUND_ALSADEVICE[MAXVALIDMODES];
 static MenuOptionSet_t MEOS_SOUND_ALSADEVICE = MAKE_MENUOPTIONSETDYN( MEOSN_SOUND_ALSADEVICE, NULL, 0, 0x0 );
 static MenuOption_t MEO_SOUND_ALSADEVICE = MAKE_MENUOPTION( &MF_Redfont, &MEOS_SOUND_ALSADEVICE, &alsadevice );
@@ -1307,7 +1307,7 @@ static char const *MEOSN_SOUND_MIDIDRIVER[] = {
     "Windows MME",
 #endif
     ".sf2 synth",
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
     "ALSA MIDI",
 #endif
 };
@@ -1317,7 +1317,7 @@ static int32_t MEOSV_SOUND_MIDIDRIVER[] = {
     ASS_WinMM,
 #endif
     ASS_SF2,
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
     ASS_ALSA,
 #endif
 };
@@ -1353,7 +1353,7 @@ static MenuEntry_t *MEL_SOUND_DEVSETUP[] = {
 #ifndef EDUKE32_RETAIL_MENU
     &ME_SOUND_NUMVOICES,
     &ME_SOUND_MIDIDRIVER,
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
     &ME_SOUND_ALSADEVICE,
 #endif
     &ME_SOUND_OPL3AMP,
@@ -2580,6 +2580,10 @@ static void Menu_Pre(MenuID_t cm)
 
     case MENU_DISPLAYSETUP:
         Menu_PopulateLanguages();
+#ifdef MISTER_HYBRID
+        // the resolution is the OSD's
+        MenuEntry_HideOnCondition(&ME_DISPLAYSETUP_VIDEOSETUP, MH_IsOpen());
+#endif
         MenuEntry_HideOnCondition(&ME_DISPLAYSETUP_VOXELS, !g_haveVoxels);
 #ifdef USE_OPENGL
         MenuEntry_HideOnCondition(&ME_DISPLAYSETUP_UPSCALING, videoGetRenderMode() > REND_CLASSIC);
@@ -2697,7 +2701,7 @@ static void Menu_Pre(MenuID_t cm)
 #ifndef EDUKE32_RETAIL_MENU
         MenuEntry_DisableOnCondition(&ME_SOUND_MIDIDRIVER, !ud.config.MusicToggle);
         MenuEntry_DisableOnCondition(&ME_SOUND_NUMVOICES, !ud.config.SoundToggle);
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
         MenuEntry_DisableOnCondition(&ME_SOUND_ALSADEVICE, !ud.config.MusicToggle);
         MenuEntry_HideOnCondition(&ME_SOUND_ALSADEVICE, musicdevice != ASS_ALSA);
 #endif
@@ -2711,6 +2715,20 @@ static void Menu_Pre(MenuID_t cm)
         MenuEntry_HideOnCondition(&ME_SOUND_OPL3AMP, musicdevice != ASS_OPL3);
         MenuEntry_HideOnCondition(&ME_SOUND_SF2, musicdevice != ASS_SF2);
 #endif
+#ifdef MISTER_HYBRID
+        // the music goes to the core's FM chip or MIDI, as the OSD's Music
+        // says, at the core's rate
+        if (MH_IsOpen())
+        {
+            MenuEntry_HideOnCondition(&ME_SOUND_SAMPLINGRATE, 1);
+#ifndef EDUKE32_RETAIL_MENU
+            MenuEntry_HideOnCondition(&ME_SOUND_MIDIDRIVER, 1);
+            MenuEntry_HideOnCondition(&ME_SOUND_OPL3STEREO, 1);
+            MenuEntry_HideOnCondition(&ME_SOUND_OPL3AMP, 1);
+            MenuEntry_HideOnCondition(&ME_SOUND_SF2, 1);
+#endif
+        }
+#endif
         MenuEntry_DisableOnCondition(&ME_SOUND_RESTART, soundrate == ud.config.MixRate &&
                                                         soundvoices == ud.config.NumVoices &&
                                                         musicdevice == ud.config.MusicDevice &&
@@ -2719,7 +2737,7 @@ static void Menu_Pre(MenuID_t cm)
                                                         extmusic == g_maybeUpgradeMusic &&
 #endif
                                                         !Bstrcmp(sf2bankfile, SF2_BankFile)
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
                                                         && alsadevices.size() > 0
                                                         && alsadevices[alsadevice].clntid == ALSA_ClientID
                                                         && alsadevices[alsadevice].portid == ALSA_PortID
@@ -2742,6 +2760,10 @@ static void Menu_Pre(MenuID_t cm)
         MenuEntry_DisableOnCondition(&ME_JOYSTICK_EDITBUTTONS, !CONTROL_JoyPresent || (joystick.numButtons == 0 && joystick.numHats == 0));
         MenuEntry_DisableOnCondition(&ME_JOYSTICK_ADV, !CONTROL_JoyPresent);
         MenuEntry_DisableOnCondition(&ME_JOYSTICK_DEFAULTS, !joystick.isGameController);
+#ifdef MISTER_HYBRID
+        // rumble is the OSD's
+        MenuEntry_HideOnCondition(&ME_JOYSTICK_RUMBLE, MH_IsOpen());
+#endif
         break;
 
     case MENU_JOYSTICKADV:
@@ -2917,7 +2939,12 @@ static void Menu_DrawVerifyPrompt(int32_t x, int32_t y, const char * text, int n
     mgametextcenter(x, y + (90<<16), text);
 #ifndef EDUKE32_ANDROID_MENU
     char const * inputs = CONTROL_LastSeenInput == LastSeenInput::Joystick
+#ifdef MISTER_HYBRID
+        // the MiSTer menu's buttons, which A and B are (sdlayer.cpp)
+        ? (MH_IsOpen() ? "Menu OK: accept, Menu Back: return." : "Press (A) to accept, (B) to return.")
+#else
         ? "Press (A) to accept, (B) to return."
+#endif
         : "(Y/N)";
     mgametextcenter(x, y + (90<<16) + MF_Bluefont.get_yline() * numlines, inputs);
 #endif
@@ -3843,7 +3870,7 @@ static void Menu_RefreshSoundProperties()
     ud.config.MixRate     = FX_MixRate;
     ud.config.MusicDevice = MIDI_GetDevice();
 
-#if !defined(EDUKE32_RETAIL_MENU) && defined (__linux__)
+#if !defined(EDUKE32_RETAIL_MENU) && defined (AUDIOLIB_HAVE_ALSA)
     MEOS_SOUND_ALSADEVICE.numOptions = 0;
     alsadevices = ALSADrv_MIDI_ListPorts();
     if (alsadevices.size() == 0)
@@ -4032,7 +4059,7 @@ static void Menu_EntryLinkActivate(MenuEntry_t *entry)
             MUSIC_GetSongPosition(&pos);
 
         if (ud.config.MixRate != soundrate || ud.config.NumVoices != soundvoices
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
             || (musicdevice == ASS_ALSA && (size_t)alsadevice < alsadevices.size() &&
                 (ALSA_ClientID != alsadevices[alsadevice].clntid || ALSA_PortID != alsadevices[alsadevice].portid))
 #endif
@@ -4041,7 +4068,7 @@ static void Menu_EntryLinkActivate(MenuEntry_t *entry)
             S_MusicShutdown();
             S_SoundShutdown();
 
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
             ALSA_ClientID = alsadevices[alsadevice].clntid;
             ALSA_PortID = alsadevices[alsadevice].portid;
 #endif
@@ -4057,7 +4084,7 @@ static void Menu_EntryLinkActivate(MenuEntry_t *entry)
         if (ud.config.MusicToggle)
         {
             int const needsReInit = (ud.config.MusicDevice != musicdevice || (musicdevice == ASS_SF2 && Bstrcmp(SF2_BankFile, sf2bankfile))
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
                 || (musicdevice == ASS_ALSA && (size_t)alsadevice < alsadevices.size() &&
                     (ALSA_ClientID != alsadevices[alsadevice].clntid || ALSA_PortID != alsadevices[alsadevice].portid))
 #endif
@@ -8160,6 +8187,16 @@ void M_DisplayMenus(void)
     int32_t mousestatus = mouseReadAbs(&m_mousepos, &g_mouseAbs);
     if (mousestatus && g_mouseClickState == MOUSE_PRESSED)
         m_mousedownpos = m_mousepos;
+#ifdef MISTER_HYBRID
+    // the OSD's Resolution changed: the pointer, worked out from the size of
+    // the screen, moved, but not the mouse
+    static int32_t mouseXdim, mouseYdim;
+    if (xdim != mouseXdim || ydim != mouseYdim)
+    {
+        mouseXdim = xdim, mouseYdim = ydim;
+        m_prevmousepos = m_mousepos;
+    }
+#endif
 
     Menu_RunInput(m_currentMenu);
 

@@ -39,8 +39,12 @@
 # include "driver_winmm.h"
 #endif
 
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
 # include "driver_alsa.h"
+#endif
+
+#ifdef MISTER_HYBRID
+# include "driver_misterfm.h"
 #endif
 
 int ASS_PCMSoundDriver  = ASS_AutoDetect;
@@ -176,7 +180,7 @@ static struct
     // ALSA MIDI synthesiser
     {
         "ALSA",
-    #ifdef __linux__
+    #ifdef AUDIOLIB_HAVE_ALSA
         ALSADrv_GetError,
         ALSADrv_ErrorString,
 
@@ -195,6 +199,28 @@ static struct
         UNSUPPORTED_COMPLETELY
     #endif
     },
+
+#ifdef MISTER_HYBRID
+    // The MiSTer hybrid core's FM chip, or MIDI to its synthesizer or an
+    // MT32-pi: clocked by the SDL driver (MisterFMDrv_Advance())
+    {
+        "MiSTer FM chip",
+        MisterFMDrv_GetError,
+        MisterFMDrv_ErrorString,
+
+        UNSUPPORTED_PCM,
+
+        EMIDI_AdLib,
+        MisterFMDrv_MIDI_Init,
+        MisterFMDrv_MIDI_Shutdown,
+        MisterFMDrv_MIDI_StartPlayback,
+        MisterFMDrv_MIDI_HaltPlayback,
+        MisterFMDrv_MIDI_SetTempo,
+        MisterFMDrv_MIDI_Lock,
+        MisterFMDrv_MIDI_Unlock,
+        nullptr,
+    },
+#endif
 };
 
 

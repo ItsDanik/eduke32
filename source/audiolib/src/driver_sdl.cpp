@@ -66,12 +66,22 @@ char SDLAudioDriverName[16];
 char *SDLAudioDriverNameEnv;
 #endif
 
+#ifdef MISTER_HYBRID
+#include "driver_misterfm.h"
+static int MisterFrameSize = 4, MisterFrameRate = 44100;
+#endif
+
 static void fillData(void * userdata, Uint8 * ptr, int remaining)
 {
     UNREFERENCED_PARAMETER(userdata);
 
     if (!MixBuffer || !MixCallBack)
       return;
+
+#ifdef MISTER_HYBRID
+    // the music of the core's FM chip keeps time with the block being filled
+    MisterFMDrv_Advance(remaining / MisterFrameSize, MisterFrameRate);
+#endif
 
     while (remaining > 0)
     {
@@ -210,6 +220,11 @@ int SDLDrv_PCM_Init(int *mixrate, int *numchannels, void * initdata)
         ErrorCode = SDLErr_OpenAudio;
         return SDLErr_Error;
     }
+
+#ifdef MISTER_HYBRID
+    MisterFrameSize = actual.channels * 2;
+    MisterFrameRate = actual.freq;
+#endif
 
 #if (SDL_MAJOR_VERSION >= 2)
     char *drivername = Xstrdup(SDL_GetCurrentAudioDriver());

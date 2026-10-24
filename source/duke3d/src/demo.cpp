@@ -21,6 +21,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 //-------------------------------------------------------------------------
 
 #include "demo.h"
+
+#ifdef MISTER_HYBRID
+#include "mister_port.h"
+#endif
 #include "duke3d.h"
 #include "input.h"
 #include "menus.h"
@@ -954,6 +958,9 @@ nextdemo_nomenu:
         // updating totalclock when profiling (both via sampletimer()):
         if (!Demo_IsProfiling())
             gameHandleEvents();
+#ifdef MISTER_HYBRID
+        MiSTer_UpdateOptions();
+#endif
 
         if (g_player[myconnectindex].ps->gm == MODE_GAME)
         {

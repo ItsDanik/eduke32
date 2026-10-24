@@ -576,7 +576,11 @@ void G_UpdateScreenArea(void)
 
     v1.y += fragbarheight() * 100;
 
+#ifdef MISTER_HYBRID
+    if (ud.screen_size >= 8 && !MiSTer_StatusBarOverlay())
+#else
     if (ud.screen_size >= 8 && ud.statusbarmode == 0)
+#endif
         v2.y -= bottomStatusY * ud.statusbarscale;
 
     v1.y = scale(v1.y, ydim, 200 * 100);

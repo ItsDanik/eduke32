@@ -1054,7 +1054,7 @@ void G_DisplayRest(int32_t smoothratio)
                 G_DrawCameraText(pp->newowner);
             else
             {
-                P_DisplayWeapon();
+                MISTER_HUD(-MiSTer_HudBottom(), P_DisplayWeapon());
 #ifdef SPLITSCREEN_MOD_HACKS
                 if (pp2)  // HACK
                 {
@@ -1066,7 +1066,7 @@ void G_DisplayRest(int32_t smoothratio)
 #endif
 
                 if (pp->over_shoulder_on == 0)
-                    P_DisplayScuba();
+                    MISTER_HUD(-MiSTer_HudBottom(), P_DisplayScuba());
 #ifdef SPLITSCREEN_MOD_HACKS
                 if (pp2 && pp2->over_shoulder_on == 0)  // HACK
                 {
@@ -1142,16 +1142,18 @@ void G_DisplayRest(int32_t smoothratio)
                 if (G_HaveUserMap())
                     levelname = boardfilename;
                 else if (!(G_GetLogoFlags() & LOGO_HIDEEPISODE))
-                    minitext(5, a+6, g_volumeNames[ud.volume_number], 0, 2+8+16+256);
-                minitext(5, a+6+6, levelname, 0, 2+8+16+256);
+                    MISTER_HUD(MiSTer_HudDown(), minitext(5, a+6, g_volumeNames[ud.volume_number], 0, 2+8+16+256));
+                MISTER_HUD(MiSTer_HudDown(), minitext(5, a+6+6, levelname, 0, 2+8+16+256));
             }
         }
     }
 
-    if (pp->invdisptime > 0) G_DrawInventory(pp);
+    MISTER_HUD(MiSTer_HudDown(),
+        if (pp->invdisptime > 0) G_DrawInventory(pp);
 
-    if (VM_OnEvent(EVENT_DISPLAYSBAR, g_player[screenpeek].ps->i, screenpeek) == 0)
-        G_DrawStatusBar(screenpeek);
+        if (VM_OnEvent(EVENT_DISPLAYSBAR, g_player[screenpeek].ps->i, screenpeek) == 0)
+            G_DrawStatusBar(screenpeek);
+    );
 
 #ifdef SPLITSCREEN_MOD_HACKS
     // HACK
@@ -1162,7 +1164,7 @@ void G_DisplayRest(int32_t smoothratio)
     }
 #endif
 
-    G_PrintGameQuotes(screenpeek);
+    MISTER_HUD(-MiSTer_HudUp(), G_PrintGameQuotes(screenpeek));
 
     if (ud.show_level_text && hud_showmapname && g_levelTextTime > 1)
     {
@@ -1180,7 +1182,7 @@ void G_DisplayRest(int32_t smoothratio)
                     ? currentboardfilename
                     : g_mapInfo[(ud.volume_number*MAXLEVELS) + ud.level_number].name;
 
-            menutext_(160<<16, (90+16+8)<<16, -g_levelTextTime+22/*quotepulseshade*/, fn, o, TEXT_XCENTER);
+            MISTER_HUD(-MiSTer_HudUp(), menutext_(160<<16, (90+16+8)<<16, -g_levelTextTime+22/*quotepulseshade*/, fn, o, TEXT_XCENTER));
         }
     }
 

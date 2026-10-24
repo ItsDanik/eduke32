@@ -353,6 +353,13 @@ grpfile_t * FindGroup(int32_t crcval)
             return grp;
     }
 
+#ifdef MISTER_HYBRID
+    // MiSTer: the add-ons made for the Atomic Edition (1.5) also with the
+    // Plutonium Pak (1.4), the same game
+    if (crcval == DUKE15_CRC)
+        return FindGroup(DUKEPP_CRC);
+#endif
+
     return NULL;
 }
 

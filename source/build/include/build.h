@@ -62,8 +62,14 @@ enum rendmode_t {
 
 # define MAXXDIM 10240
 # define MAXYDIM 4320
-# define MINXDIM 640
-# define MINYDIM 480
+# ifdef MISTER_HYBRID
+// the core's modes, from 320x200 (mister.h)
+#  define MINXDIM 320
+#  define MINYDIM 200
+# else
+#  define MINXDIM 640
+#  define MINYDIM 480
+# endif
 
 // additional space beyond wall, in walltypes:
 # define M32_FIXME_WALLS 512

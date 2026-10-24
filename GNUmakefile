@@ -373,7 +373,7 @@ audiolib_excl := \
 ifneq ($(PLATFORM),WINDOWS)
     audiolib_excl += driver_directsound.cpp driver_winmm.cpp
 endif
-ifneq ($(SUBPLATFORM),LINUX)
+ifneq ($(SUBPLATFORM)$(MISTER_HYBRID),LINUX0)
     audiolib_excl += driver_alsa.cpp
 endif
 ifneq ($(RENDERTYPE),SDL)
@@ -565,7 +565,7 @@ duke3d_editor_miscdeps :=
 duke3d_game_orderonlydeps :=
 duke3d_editor_orderonlydeps :=
 
-ifeq ($(SUBPLATFORM),LINUX)
+ifeq ($(SUBPLATFORM)$(MISTER_HYBRID),LINUX0)
     LIBS += -lFLAC -lasound
 endif
 

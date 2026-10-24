@@ -1,4 +1,5 @@
 #include "baselayer.h"
+#include "mister.h"
 
 #include "a.h"
 #include "build.h"
@@ -890,6 +891,14 @@ int engineFPSLimit(bool const throttle)
 
     if (r_maxfps == -2)
         return true;
+#ifdef MISTER_HYBRID
+    // One frame per field. The game's own loop draws every time: its frame
+    // waits for the field (SDL_MISTER_VSYNC). The others (menus, loading
+    // screens) only once the field of the last frame is over, so that they
+    // do not wait for it.
+    if (MH_IsOpen())
+        return !throttle || MH_FieldCounter() != misterShownField;
+#endif
 
     g_frameDelay = calcFrameDelay(!throttle || ((unsigned)(r_maxfps-1) < (unsigned)refreshfreq) ? r_maxfps : -1);
 

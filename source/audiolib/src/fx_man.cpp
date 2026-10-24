@@ -41,7 +41,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 # include "driver_sdl.h"
 #endif
 
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
 # include "driver_alsa.h"
 #endif
 
@@ -85,7 +85,7 @@ static int osdcmd_cvar_set_audiolib(osdcmdptr_t parm)
     else if (ASS_MIDISoundDriver == ASS_WinMM && !Bstrcasecmp(parm->name, "mus_mme_device"))
         MIDI_Restart();
 #endif
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
     else if (ASS_MIDISoundDriver == ASS_ALSA && (!Bstrcasecmp(parm->name, "mus_alsa_clientid") || !Bstrcasecmp(parm->name, "mus_alsa_portid")))
         MIDI_Restart();
 #endif
@@ -120,7 +120,7 @@ void FX_InitCvars(void)
 {
     static osdcvardata_t cvars_audiolib [] ={
         { "mus_emidicard", "force a specific EMIDI instrument set", (void*) &ASS_EMIDICard, CVAR_INT | CVAR_FUNCPTR, -1, 10 },
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
         { "mus_alsa_clientid", "specify the ALSA MIDI client ID", (void*) &ALSA_ClientID, CVAR_INT | CVAR_FUNCPTR, 0, 255 },
         { "mus_alsa_portid", "specify the ALSA MIDI port ID", (void*) &ALSA_PortID, CVAR_INT | CVAR_FUNCPTR, 0, 15 },
 #endif

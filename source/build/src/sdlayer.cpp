@@ -49,6 +49,7 @@
 
 #include "vfs.h"
 #include "communityapi.h"
+#include "mister.h"
 
 #define MICROPROFILE_IMPL
 #include "microprofile.h"
@@ -80,9 +81,40 @@ bool startwin_isopen(void) { return false; }
 int32_t inputchecked = 0;
 
 char quitevent=0, appactive=1, novideo=0;
+#ifdef MISTER_HYBRID
+void (*misterCoreGone)(void);
+uint32_t misterShownField;
+
+// Drawing ahead, decided by benchmark (CLAUDE.md of EDuke32_MiSTer).
+// MISTER_HYBRID_AHEAD=0 in the environment: every frame shown at the next
+// field, for comparing.
+#define MISTER_DRAW_AHEAD 1
+static int misterAhead;
+static uint32_t misterTarget;
+static int misterTargetValid;
+
+// A game that falls behind (loading, a menu that waits) is given the next
+// field: its time never stands still
+uint32_t misterField(void)
+{
+    uint32_t const field = MH_FieldCounter();
+
+    if (!misterAhead || MH_Interlaced())
+        return field;
+    if (!misterTargetValid || (int32_t)(field + 1 - misterTarget) > 0)
+    {
+        misterTarget = field + 1;
+        misterTargetValid = 1;
+    }
+    return misterTarget;
+}
+#endif
 
 // video
 static SDL_Surface *sdl_surface/*=NULL*/;
+#ifdef MISTER_HYBRID
+static int misterpalettechanged = 1;
+#endif
 
 static vec2_t sdl_resize;
 static int sdl_minimized;
@@ -170,6 +202,15 @@ int32_t wm_msgbox(const char *name, const char *fmt, ...)
     Bvsnprintf(buf,MSGBOX_PRINTF_MAX,fmt,va);
     va_end(va);
     buf[MSGBOX_PRINTF_MAX-1] = 0;
+#ifdef MISTER_HYBRID
+    // on the screen of the core, until the player leaves it
+    if (MH_Open())
+    {
+        LOG_F(ERROR, "%s: %s", name, buf);
+        MH_UI_Message(name, buf, MH_UI_WAIT | MH_UI_ERROR);
+        return 0;
+    }
+#endif
 #if defined EDUKE32_OSX
     auto result = osx_msgbox(name, buf);
     return result;
@@ -217,6 +258,14 @@ int32_t wm_ynbox(const char *name, const char *fmt, ...)
     Bvsnprintf(buf,MSGBOX_PRINTF_MAX,fmt,va);
     va_end(va);
     buf[MSGBOX_PRINTF_MAX-1] = 0;
+#ifdef MISTER_HYBRID
+    // no one to ask: the answer is no (importing an old setup file)
+    if (MH_IsOpen())
+    {
+        LOG_F(INFO, "%s: %s: no", name, buf);
+        return 0;
+    }
+#endif
 #if defined EDUKE32_OSX
     auto result = osx_ynbox(name, buf);
     return result;
@@ -506,6 +555,17 @@ int main(int argc, char *argv[])
 #endif
 
     sdlayer_sethints();
+
+#ifdef MISTER_HYBRID
+    // the launcher keeps what is printed as the log: nothing of it is to be
+    // lost if the game ends badly
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    // 8-bit frames, the core does the palette lookup; one frame per field
+    SDL_SetHint("SDL_MISTER_VIDEO_FORMAT", "INDEX8");
+    // waiting for the field is ours when drawing ahead (videoShowFrame())
+    misterAhead = MISTER_DRAW_AHEAD && !(getenv("MISTER_HYBRID_AHEAD") && atoi(getenv("MISTER_HYBRID_AHEAD")) == 0);
+    SDL_SetHint("SDL_MISTER_VSYNC", misterAhead ? "0" : "1");
+#endif
 
 #ifdef USE_OPENGL
     char *argp;
@@ -886,6 +946,76 @@ error:
 
 static int numjoysticks;
 
+#ifdef MISTER_HYBRID
+// The core's joystick 1 as a game controller (mister.h): its state read
+// every time the events are, its buttons put where the game's menus and
+// bindings expect them. Use Item held with the d-pad left or right picks the
+// item instead (Inventory_Left / Inventory_Right) and the d-pad does not turn;
+// let go without that, Use Item uses it, held for a few fields so that a
+// tic of the game sees it.
+static void misterJoyUpdate(void)
+{
+    static int itemHeld, itemPicked;
+    static uint32_t itemUntil;
+
+    if (!joydev || !joystick.isGameController || controller)
+        return;
+    if (!appactive)
+    {
+        joystick.bits = 0;
+        return;
+    }
+
+    auto const button = [](int b) { return SDL_JoystickGetButton(joydev, b) != 0; };
+    int32_t bits = 0;
+
+    if (button(MISTER_J1_FIRE))       bits |= 1 << MISTER_CB_FIRE;
+    if (button(MISTER_J1_OPEN))       bits |= 1 << MISTER_CB_OPEN;
+    if (button(MISTER_J1_JUMP))       bits |= 1 << MISTER_CB_JUMP;
+    if (button(MISTER_J1_CROUCH))     bits |= 1 << MISTER_CB_CROUCH;
+    if (button(MISTER_J1_NEXTWEAPON)) bits |= 1 << MISTER_CB_NEXTWEAPON;
+    if (button(MISTER_J1_MAP))        bits |= 1 << MISTER_CB_MAP;
+    if (button(MISTER_J1_MENU))       bits |= 1 << MISTER_CB_MENU;
+    if (button(MISTER_JOY_L3))        bits |= 1 << MISTER_CB_L3;
+    if (button(MISTER_JOY_R3))        bits |= 1 << MISTER_CB_R3;
+    if (button(MISTER_J1_MENUOK) || button(MISTER_JOY_MENUOK))     bits |= 1 << SDL_CONTROLLER_BUTTON_A;
+    if (button(MISTER_J1_MENUBACK) || button(MISTER_JOY_MENUBACK)) bits |= 1 << SDL_CONTROLLER_BUTTON_B;
+
+    int const hat = SDL_JoystickGetHat(joydev, 0);
+    if (hat & SDL_HAT_UP)   bits |= 1 << SDL_CONTROLLER_BUTTON_DPAD_UP;
+    if (hat & SDL_HAT_DOWN) bits |= 1 << SDL_CONTROLLER_BUTTON_DPAD_DOWN;
+
+    uint32_t const now = timerGetTicks();
+
+    if (button(MISTER_J1_USEITEM))
+    {
+        if (!itemHeld)
+            itemHeld = 1, itemPicked = 0;
+        if (hat & SDL_HAT_LEFT)  bits |= 1 << MISTER_CB_ITEMLEFT, itemPicked = 1;
+        if (hat & SDL_HAT_RIGHT) bits |= 1 << MISTER_CB_ITEMRIGHT, itemPicked = 1;
+    }
+    else
+    {
+        if (itemHeld && !itemPicked)
+            itemUntil = now + 80;
+        itemHeld = 0;
+        if (hat & SDL_HAT_LEFT)  bits |= 1 << SDL_CONTROLLER_BUTTON_DPAD_LEFT;
+        if (hat & SDL_HAT_RIGHT) bits |= 1 << SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
+    }
+    if ((int32_t)(itemUntil - now) > 0)
+        bits |= 1 << MISTER_CB_USEITEM;
+
+    // A button the game cleared (JOYSTICK_ClearAllButtons(): it took the
+    // press, a menu opened) stays up until it is let go, as a key does
+    static int32_t lastBits, takenBits;
+    takenBits = (takenBits | (lastBits & ~joystick.bits)) & bits;
+    joystick.bits = lastBits = bits & ~takenBits;
+
+    for (int i = 0; i < joystick.numAxes; i++)
+        joystick.pAxis[i] = SDL_JoystickGetAxis(joydev, i);
+}
+#endif
+
 void joyScanDevices()
 {
     inputdevices &= ~DEV_JOYSTICK;
@@ -912,6 +1042,31 @@ void joyScanDevices()
         VLOG_F(LOG_INPUT, "Game controllers:");
 
         char name[128];
+
+#ifdef MISTER_HYBRID
+        // The core's joystick 1, as a game controller (misterJoyUpdate())
+        if (MH_IsOpen() && (joydev = SDL_JoystickOpen(0)))
+        {
+            VLOG_F(LOG_INPUT, "Using joystick: %s, as a game controller", SDL_JoystickNameForIndex(0));
+            joystick.flags        = 0;
+            joystick.numBalls     = 0;
+            joystick.numHats      = 0;
+            joystick.numAxes      = SDL_CONTROLLER_AXIS_MAX;
+            joystick.numButtons   = SDL_CONTROLLER_BUTTON_PADDLE4 + 1;
+            // in the game's button menu: the core's J1 buttons (joyGetName()),
+            // not Menu OK and Menu Back, which are the menus' alone
+            joystick.validButtons = (1u << joystick.numButtons) - 1;
+            joystick.validButtons &= ~((1u << SDL_CONTROLLER_BUTTON_A) | (1u << SDL_CONTROLLER_BUTTON_B) |
+                                       (1u << SDL_CONTROLLER_BUTTON_GUIDE) | (1u << SDL_CONTROLLER_BUTTON_PADDLE4));
+            joystick.isGameController = 1;
+            joystick.hasRumble    = SDL_JoystickHasRumble(joydev);
+            Xfree(joystick.pAxis);
+            joystick.pAxis = (int32_t *)Xcalloc(joystick.numAxes, sizeof(int32_t));
+            DO_FREE_AND_NULL(joystick.pHat);
+            inputdevices |= DEV_JOYSTICK;
+            return;
+        }
+#endif
 
         for (int i = 0; i < numjoysticks; i++)
         {
@@ -1167,6 +1322,19 @@ const char *joyGetName(int32_t what, int32_t num)
             if ((unsigned)num > (unsigned)joystick.numAxes)
                 return NULL;
 
+#ifdef MISTER_HYBRID
+            if (joydev && !controller && joystick.isGameController)
+            {
+                static char const * axisStrings[] =
+                {
+                    "Left Stick X", "Left Stick Y", "Right Stick X", "Right Stick Y", "L2", "R2",
+                };
+
+                if (num < ARRAY_SSIZE(axisStrings))
+                    return axisStrings[num];
+            }
+#endif
+
 #if SDL_MAJOR_VERSION >= 2
             if (controller)
             {
@@ -1191,6 +1359,34 @@ const char *joyGetName(int32_t what, int32_t num)
         case 1:  // button
             if ((unsigned)num > (unsigned)joystick.numButtons)
                 return NULL;
+
+#ifdef MISTER_HYBRID
+            // the core's J1 buttons (core/EDuke32.sv), as the player maps them
+            if (joydev && !controller && joystick.isGameController)
+            {
+                switch (num)
+                {
+                    case SDL_CONTROLLER_BUTTON_A: return "Menu OK";
+                    case SDL_CONTROLLER_BUTTON_B: return "Menu Back";
+                    case MISTER_CB_FIRE: return "Fire";
+                    case MISTER_CB_OPEN: return "Open";
+                    case MISTER_CB_JUMP: return "Jump";
+                    case MISTER_CB_CROUCH: return "Crouch";
+                    case MISTER_CB_NEXTWEAPON: return "Next Weapon";
+                    case MISTER_CB_USEITEM: return "Use Item";
+                    case MISTER_CB_ITEMLEFT: return "Use Item+Left";
+                    case MISTER_CB_ITEMRIGHT: return "Use Item+Right";
+                    case MISTER_CB_MAP: return "Map";
+                    case MISTER_CB_MENU: return "Menu";
+                    case MISTER_CB_L3: return "L3";
+                    case MISTER_CB_R3: return "R3";
+                    case SDL_CONTROLLER_BUTTON_DPAD_UP: return "D-Pad Up";
+                    case SDL_CONTROLLER_BUTTON_DPAD_DOWN: return "D-Pad Down";
+                    case SDL_CONTROLLER_BUTTON_DPAD_LEFT: return "D-Pad Left";
+                    case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: return "D-Pad Right";
+                }
+            }
+#endif
 
 #if SDL_MAJOR_VERSION >= 2
             if (controller)
@@ -1390,6 +1586,24 @@ void videoGetModes(int display)
     }
 
     validmodecnt = 0;
+
+#ifdef MISTER_HYBRID
+    // The core's modes that are 15kHz with one frame per field (320x200,
+    // 640x200, 320x240, 640x240), of those the loaded core has: its display
+    // modes. Not 640x400 and 640x480, which are interlaced on a 15kHz screen.
+    if (MH_IsOpen())
+    {
+        for (i = 0; i < SDL_GetNumDisplayModes(display); i++)
+        {
+            SDL_GetDisplayMode(display, i, &dispmode);
+            if (dispmode.h <= 240)
+                SDL_ADDMODE(dispmode.w, dispmode.h, 8, 1);
+        }
+        qsort((void *)validmode, validmodecnt, sizeof(struct validmode_t), &sortmodes);
+        modeschecked = 1;
+        return;
+    }
+#endif
 
     // do fullscreen modes first
     for (i = 0; i < SDL_GetNumDisplayModes(display); i++)
@@ -1735,6 +1949,22 @@ int setvideomode_sdlcommonpost(int32_t x, int32_t y, int32_t c, int32_t fs, int3
     int const matchedResolution = (desktopmode.w == x && desktopmode.h == y);
     int const borderless = (r_borderless == 1 || (r_borderless == 2 && matchedResolution)) ? SDL_WINDOW_BORDERLESS : 0;
 
+#ifdef MISTER_HYBRID
+    // the size of the window picks the core's video mode (hybrid/sdl2)
+    if (MH_IsOpen())
+    {
+        SDL_SetWindowSize(sdl_window, x, y);
+        refreshfreq = 59.64;
+        sdl_surface = SDL_GetWindowSurface(sdl_window);
+        SDL_FlushEvent(SDL_WINDOWEVENT);
+        videoFadePalette(palfadergb.r, palfadergb.g, palfadergb.b, palfadedelta);
+        if (regrab)
+            mouseGrabInput(g_mouseLockedToWindow);
+        g_displayindex = newdisplayindex;
+        return 0;
+    }
+#endif
+
     if (fs)
     {
         SDL_DisplayMode dispmode = { 0, x, y, maxrefreshfreq, nullptr }, newmode;
@@ -1908,6 +2138,12 @@ int32_t videoSetMode(int32_t x, int32_t y, int32_t c, int32_t fs)
 #endif  // defined USE_OPENGL
     {
         // init
+#ifdef MISTER_HYBRID
+        // the size of the window picks the core's video mode (hybrid/sdl2)
+        if (MH_IsOpen())
+            sdl_window = SDL_CreateWindow("", 0, 0, x, y, 0);
+        else
+#endif
         sdl_window = SDL_CreateWindow("", g_windowPosValid ? g_windowPos.x : (int)SDL_WINDOWPOS_CENTERED_DISPLAY(display),
                                           g_windowPosValid ? g_windowPos.y : (int)SDL_WINDOWPOS_CENTERED_DISPLAY(display), x, y,
                                       SDL_WINDOW_RESIZABLE | borderless);
@@ -2180,6 +2416,45 @@ void videoShowFrame(int32_t w)
         while (lockcount) videoEndDrawing();
     }
 
+#ifdef MISTER_HYBRID
+    // The window surface is 8-bit too (SDL_MISTER_VIDEO_FORMAT): the frame is
+    // copied as it is and the core looks the palette up. SDL_MISTER_VSYNC
+    // makes SDL_UpdateWindowSurface() wait for the field, or, drawing ahead,
+    // the frame is shown at the field it was drawn for.
+    if (MH_IsOpen())
+    {
+        sdl_surface = SDL_GetWindowSurface(sdl_window);
+        if (!sdl_surface || !sdl_surface->format->palette)
+            return;
+        if (misterpalettechanged)
+        {
+            SDL_Color colors[256];
+            for (int i = 0; i < 256; i++)
+                colors[i] = { curpalettefaded[i].r, curpalettefaded[i].g, curpalettefaded[i].b, 255 };
+            SDL_SetPaletteColors(sdl_surface->format->palette, colors, 0, 256);
+            misterpalettechanged = 0;
+        }
+        auto in = (uint8_t const *)softsurface_getBuffer();
+        auto out = (uint8_t *)sdl_surface->pixels;
+        int const w = min(xdim, sdl_surface->w);
+        for (int y = min(ydim, sdl_surface->h); y > 0; y--, in += xdim, out += sdl_surface->pitch)
+            memcpy(out, in, w);
+        if (misterAhead && !MH_Interlaced())
+        {
+            // the next one is for the field after, and is not started before
+            // the field two before that
+            MH_PresentAtField(misterField());
+            SDL_UpdateWindowSurface(sdl_window);
+            misterTarget++;
+            MH_WaitField(misterTarget - 3);
+        }
+        else
+            SDL_UpdateWindowSurface(sdl_window);
+        misterShownField = MH_FieldCounter();
+        return;
+    }
+#endif
+
     if (SDL_MUSTLOCK(sdl_surface)) SDL_LockSurface(sdl_surface);
     softsurface_blitBuffer((uint32_t*) sdl_surface->pixels, sdl_surface->format->BitsPerPixel);
     if (SDL_MUSTLOCK(sdl_surface)) SDL_UnlockSurface(sdl_surface);
@@ -2208,6 +2483,9 @@ int32_t videoUpdatePalette(int32_t start, int32_t num)
     if (bpp > 8)
         return 0;  // no palette in opengl
 
+#ifdef MISTER_HYBRID
+    misterpalettechanged = 1;
+#endif
 #ifdef USE_OPENGL
     if (!nogl)
         glsurface_setPalette(curpalettefaded);
@@ -2497,6 +2775,11 @@ int32_t handleevents_sdlcommon(SDL_Event *ev)
 
         case SDL_QUIT:
             quitevent = 1;
+#ifdef MISTER_HYBRID
+            // another core was loaded: the game goes at once
+            if (misterCoreGone && !MH_IsOpen())
+                misterCoreGone();
+#endif
             return -1;
     }
 
@@ -2811,7 +3094,7 @@ int32_t handleevents(void)
         {
             auto dorumble = [](uint16_t const low, uint16_t const high, uint32_t const time)
             {
-                if (joystick.isGameController)
+                if (controller)
                     SDL_GameControllerRumble(controller, low, high, time);
                 else
                     SDL_JoystickRumble(joydev, low, high, time);
@@ -2859,6 +3142,9 @@ int32_t handleevents(void)
     }
 
     rv = handleevents_pollsdl();
+#ifdef MISTER_HYBRID
+    misterJoyUpdate();
+#endif
 
     inputchecked = 0;
     timerUpdateClock();

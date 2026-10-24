@@ -50,6 +50,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include "vfs.h"
 
+#ifdef MISTER_HYBRID
+#include "mister_port.h"
+#endif
+
 // Uncomment to prevent anything except mirrors from drawing. It is sensible to
 // also uncomment ENGINE_CLEAR_SCREEN in build/src/engine_priv.h.
 //#define DEBUG_MIRRORS_ONLY
@@ -243,6 +247,15 @@ void G_HandleSpecialKeys(void)
     }
 #endif
 }
+
+#ifdef MISTER_HYBRID
+// The core is gone: quit without the end screens, which wait for a key
+static void G_MiSTerCoreGone(void)
+{
+    g_quickExit = 1;
+    G_GameExit(nullptr);
+}
+#endif
 
 void G_GameQuit(void)
 {
@@ -6579,6 +6592,10 @@ static const char* dukeVerbosityCallback(loguru::Verbosity verbosity)
 
 int app_main(int argc, char const* const* argv)
 {
+#ifdef MISTER_HYBRID
+    MiSTer_Init();
+    misterCoreGone = G_MiSTerCoreGone;
+#endif
 #ifdef _WIN32
 #ifndef DEBUGGINGAIDS
     if (!G_CheckCmdSwitch(argc, argv, "-noinstancechecking") && !windowsCheckAlreadyRunning())
@@ -6599,6 +6616,12 @@ int app_main(int argc, char const* const* argv)
 
     G_ExtPreInit(argc, argv);
 
+#ifdef MISTER_HYBRID
+    // The launch script keeps what the game prints in /tmp and adds it to its
+    // log on the SD card when the game has quit: a log file there would be
+    // written line by line, each line a wait for the card
+    if (!MH_Open())
+#endif
     engineSetLogFile(APPBASENAME ".log", LOG_GAME_MAX);
     engineSetLogVerbosityCallback(dukeVerbosityCallback);
 
@@ -6642,6 +6665,9 @@ int app_main(int argc, char const* const* argv)
 
     if (!g_useCwd)
         G_AddSearchPaths();
+#ifdef MISTER_HYBRID
+    G_AddMiSTerSearchPaths();
+#endif
 
     g_maxDefinedSkill = 4;
     ud.multimode = 1;
@@ -6727,6 +6753,10 @@ int app_main(int argc, char const* const* argv)
         LOG_F(INFO, "Using config file '%s'.",g_setupFileName);
 
     G_ScanGroups();
+
+#ifdef MISTER_HYBRID
+    g_selectedGrp = MiSTer_SelectGroup();
+#endif
 
 #ifdef STARTUP_SETUP_WINDOW
     if (g_commandSetup || (!Bgetenv("SteamTenfoot") && (readSetup < 0 || (!g_noSetup && (ud.configversion != BYTEVERSION_EDUKE32 || ud.setup.forcesetup)))))
@@ -6917,6 +6947,15 @@ int app_main(int argc, char const* const* argv)
     system_getcvars();
 
     if (quitevent) app_exit(4);
+
+#ifdef MISTER_HYBRID
+    if (MH_IsOpen())
+    {
+        MiSTer_ScreenSize(&ud.setup.xdim, &ud.setup.ydim);
+        ud.setup.bpp = 8;
+        ud.setup.fullscreen = 1;
+    }
+#endif
 
     if (g_networkMode != NET_DEDICATED_SERVER && validmodecnt > 0)
     {
@@ -7148,6 +7187,9 @@ MAIN_LOOP_RESTART:
 
         g_gameUpdateAndDrawTime = g_gameUpdateTime + (double)g_lastFrameDuration * 1000.0 / (double)timerGetNanoTickRate();
 
+#ifdef MISTER_HYBRID
+        MiSTer_UpdateOptions();
+#endif
         G_DoCheats();
 
         if (myplayer.gm & MODE_NEWGAME)
@@ -7180,6 +7222,10 @@ MAIN_LOOP_RESTART:
             //g_switchRoutine(co_drawframe);
             drawframe_do();
         }
+#ifdef MISTER_HYBRID
+        else if (MH_IsOpen())
+            idle(); // a menu: its frame comes with the next field
+#endif
 
         // handle CON_SAVE and CON_SAVENN
         if (g_saveRequested)

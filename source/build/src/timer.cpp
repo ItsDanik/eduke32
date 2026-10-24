@@ -7,6 +7,7 @@
 #include "compat.h"
 #include "enet.h"
 #include "renderlayer.h"
+#include "mister.h"
 
 #include <time.h>
 
@@ -119,9 +120,51 @@ uint32_t timer120(void) { return timerGetTicks<uint32_t>(120); }
 uint32_t timerGetTicks(void) { return timerGetTicks<uint32_t>(1000); }
 double   timerGetFractionalTicks(void) { return timerGetTicks<double>(1000.0); }
 
+#ifdef MISTER_HYBRID
+// The game's clock is the core's field counter (mister.h), so that every
+// frame is the time of the field it is shown at (misterField()), one field
+// after the one before: totalclock and its fraction (the game's
+// interpolation) from the fields since timerInit().
+static uint32_t misterFieldBase;
+static uint32_t misterLastTick;
+static int misterClock;
+
+static void timerMisterInit(void)
+{
+    misterClock = MH_IsOpen();
+    if (misterClock)
+        misterFieldBase = MH_FieldCounter(), misterLastTick = 0;
+}
+
+static void timerMisterUpdate(void)
+{
+    uint32_t const fields = misterField() - misterFieldBase;
+    uint64_t const now = (((uint64_t)fields * clockTicksPerSecond * MISTER_FIELD_NUM) << 16) / MISTER_FIELD_DEN;
+    int const n = (int)((uint32_t)(now >> 16) - misterLastTick);
+
+    totalclock.setFraction(now & 65535);
+
+    if (n <= 0) return;
+
+    totalclock += n;
+    misterLastTick += n;
+
+    if (usertimercallback)
+        for (int cnt = n; cnt > 0; cnt--)
+            usertimercallback();
+}
+#endif
+
 ATTRIBUTE((flatten)) void timerUpdateClock(void)
 {
     if (!clockTicksPerSecond) return;
+#ifdef MISTER_HYBRID
+    if (misterClock)
+    {
+        timerMisterUpdate();
+        return;
+    }
+#endif
 
     auto time = timerGetNanoTicks();
     auto ld   = lldiv((time - clockLastSampleTime) * clockTicksPerSecond, timerGetNanoTickRate());
@@ -293,6 +336,9 @@ int timerInit(int const tickspersecond)
 
     clockTicksPerSecond = tickspersecond;
     clockLastSampleTime = timerGetNanoTicks();
+#ifdef MISTER_HYBRID
+    timerMisterInit();
+#endif
 
     usertimercallback = nullptr;
 

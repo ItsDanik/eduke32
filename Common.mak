@@ -367,6 +367,23 @@ MICROPROFILE := 0
 
 ##### Settings overrides and implicit cascades
 
+# MiSTer hybrid core (github.com/ItsDanik/EDuke32_MiSTer): the game on the
+# MiSTer's ARM, the picture, sound and input through the FPGA core and SDL's
+# "mister" drivers. The classic renderer alone, no network, nothing the
+# MiSTer's Linux does not have.
+MISTER_HYBRID ?= 0
+ifneq (0,$(MISTER_HYBRID))
+    override USE_OPENGL := 0
+    override POLYMER := 0
+    override NETCODE := 0
+    override STARTUP_WINDOW := 0
+    override HAVE_GTK2 := 0
+    override USE_LIBVPX := 0
+    override HAVE_FLAC := 0
+    override USE_MIMALLOC := 0
+    override SDL_STATIC := 1
+endif
+
 ifneq (0,$(KRANDDEBUG))
     RELEASE := 0
 endif
@@ -830,6 +847,9 @@ endif
 
 COMPILERFLAGS += -DRENDERTYPE$(RENDERTYPE)=1
 
+ifneq (0,$(MISTER_HYBRID))
+    COMPILERFLAGS += -DMISTER_HYBRID
+endif
 ifeq (0,$(NETCODE))
     COMPILERFLAGS += -DNETCODE_DISABLE
 endif

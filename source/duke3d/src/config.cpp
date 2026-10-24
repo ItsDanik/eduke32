@@ -486,6 +486,16 @@ void CONFIG_SetupJoystick(void)
     int32_t scale;
     double sens;
 
+#ifdef MISTER_HYBRID
+    // The core's buttons are set in its OSD (Define EDuke32 buttons): the
+    // controller bindings of a saved eduke32.cfg, maybe a PC's, are not read
+    if (MH_Open())
+    {
+        CONFIG_SetGameControllerDefaults();
+        return;
+    }
+#endif
+
     if (ud.config.scripthandle < 0) return;
 
     for (i=0; i<MAXJOYBUTTONSANDHATS; i++)
@@ -610,6 +620,48 @@ void CONFIG_SetGameControllerDefaults()
 {
     CONFIG_SetGameControllerDefaultsClear();
     CONFIG_SetGameControllerAxesModern();
+
+#ifdef MISTER_HYBRID
+    // The core's joystick 1 (mister.h): its J1 buttons, the d-pad walking and
+    // turning, R2 fire and L2 the kick, L3 the run toggle and R3 the kick too.
+    // A and B are only Menu OK and Menu Back.
+    static GameControllerButtonSetting const misterButtons[] =
+    {
+        { (GameControllerButton)MISTER_CB_FIRE, gamefunc_Fire },
+        { (GameControllerButton)MISTER_CB_OPEN, gamefunc_Open },
+        { (GameControllerButton)MISTER_CB_JUMP, gamefunc_Jump },
+        { (GameControllerButton)MISTER_CB_CROUCH, gamefunc_Crouch },
+        { (GameControllerButton)MISTER_CB_NEXTWEAPON, gamefunc_Next_Weapon },
+        { (GameControllerButton)MISTER_CB_USEITEM, gamefunc_Inventory },
+        { (GameControllerButton)MISTER_CB_ITEMLEFT, gamefunc_Inventory_Left },
+        { (GameControllerButton)MISTER_CB_ITEMRIGHT, gamefunc_Inventory_Right },
+        { (GameControllerButton)MISTER_CB_MAP, gamefunc_Map },
+        { (GameControllerButton)MISTER_CB_L3, gamefunc_AutoRun },
+        { (GameControllerButton)MISTER_CB_R3, gamefunc_Quick_Kick },
+        { CONTROLLER_BUTTON_DPAD_UP, gamefunc_Move_Forward },
+        { CONTROLLER_BUTTON_DPAD_DOWN, gamefunc_Move_Backward },
+        { CONTROLLER_BUTTON_DPAD_LEFT, gamefunc_Turn_Left },
+        { CONTROLLER_BUTTON_DPAD_RIGHT, gamefunc_Turn_Right },
+    };
+
+    static GameControllerDigitalAxisSetting const misterAxes[] =
+    {
+        { CONTROLLER_AXIS_TRIGGERLEFT, 1, gamefunc_Quick_Kick },
+        { CONTROLLER_AXIS_TRIGGERRIGHT, 1, gamefunc_Fire },
+    };
+
+    for (auto const & button : misterButtons)
+        button.apply();
+
+    for (auto const & digitalAxis : misterAxes)
+        digitalAxis.apply();
+
+    ud.config.JoystickAimAssist     = 1;
+    ud.config.JoystickAimWeight     = 4;
+    ud.config.JoystickViewCentering = 4;
+    ud.config.controllerRumble = 1;
+    return;
+#endif
 
     static GameControllerButtonSetting const buttons[] =
     {

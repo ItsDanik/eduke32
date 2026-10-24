@@ -23,6 +23,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifndef input_h_
 #define input_h_
 
+#ifdef MISTER_HYBRID
+#include "mister_port.h"
+#endif
+
 extern int32_t I_CheckAllInput(void);
 extern void I_ClearAllInput(void);
 extern void I_ClearLast(void);
@@ -48,10 +52,21 @@ extern int32_t I_MenuDown(void);
 extern int32_t I_MenuLeft(void);
 extern int32_t I_MenuRight(void);
 
+#ifdef MISTER_HYBRID
+// The walking and turning a menu also moves with are cleared as well, until
+// they are let go: the d-pad has them (CONFIG_SetGameControllerDefaults()),
+// and a held one moved the menu every frame besides its direction, which
+// repeats only after a delay
+extern void I_MenuUpClear(void);
+extern void I_MenuDownClear(void);
+extern void I_MenuLeftClear(void);
+extern void I_MenuRightClear(void);
+#else
 #define I_MenuUpClear    I_ClearLast
 #define I_MenuDownClear  I_ClearLast
 #define I_MenuLeftClear  I_ClearLast
 #define I_MenuRightClear I_ClearLast
+#endif
 
 extern int32_t I_PanelUp(void);
 extern int32_t I_PanelDown(void);
@@ -81,10 +96,20 @@ extern int32_t I_EnterText(char *t, int32_t maxlength, int32_t flags);
 #define FF_PLAYER_DMG_SCALE  10
 #define FF_PLAYER_TIME_SCALE 4
 
-static FORCE_INLINE void I_AddForceFeedback(int const lo, int const hi, int const time)
+static FORCE_INLINE void I_AddForceFeedback(int lo, int hi, int time)
 {
+#ifdef MISTER_HYBRID
+    // the OSD's Rumble (On, Strong, Off), not the game's option
+    int const strength = MiSTer_Rumble();
+
+    if (!joystick.hasRumble || !strength)
+        return;
+
+    lo *= strength, hi *= strength, time = time * (strength + 1) / 2;
+#else
     if (!joystick.hasRumble || !ud.config.controllerRumble)
         return;
+#endif
 
     joystick.rumbleHigh = min<int>(UINT16_MAX, joystick.rumbleHigh + hi);
     joystick.rumbleLow  = min<int>(UINT16_MAX, joystick.rumbleLow + lo);

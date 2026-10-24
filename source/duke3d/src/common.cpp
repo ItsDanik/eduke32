@@ -590,6 +590,24 @@ static void Duke_AddSteamPaths(const char *basepath)
 #endif
 #endif
 
+#ifdef MISTER_HYBRID
+// Megaton Edition's add-ons, as they are in its folder (gameroot), which a
+// player copies whole into the game's (the current folder, -usecwd)
+void G_AddMiSTerSearchPaths(void)
+{
+    char cwd[BMAX_PATH];
+    if (!buildvfs_getcwd(cwd, sizeof(cwd)))
+        return;
+    static char const *const addons[] = { "addons/dc", "addons/nw", "addons/vacation" };
+    for (char const *addon : addons)
+    {
+        char path[BMAX_PATH];
+        Bsnprintf(path, sizeof(path), "%s/%s", cwd, addon);
+        addsearchpath_user(path, SEARCHPATH_REMOVE);
+    }
+}
+#endif
+
 void G_AddSearchPaths(void)
 {
 #ifndef EDUKE32_STANDALONE

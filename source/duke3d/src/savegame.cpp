@@ -151,6 +151,12 @@ static void ReadSaveGameHeaders_CACHE1D(BUILDVFS_FIND_REC *f)
     for (; f != nullptr; f = f->next)
     {
         char const * fn = f->name;
+#ifdef MISTER_HYBRID
+        // in the game's folder of saved games
+        char path[BMAX_PATH];
+        Bsnprintf(path, sizeof(path), "%s%s", MiSTer_SaveDir(), f->name);
+        fn = path;
+#endif
         buildvfs_kfd fil = kopen4loadfrommod(fn, 0);
         if (fil == buildvfs_kfd_invalid)
             continue;
@@ -212,7 +218,11 @@ static void ReadSaveGameHeaders_Internal(void)
 {
     static char const DefaultPath[] = "/", SavePattern[] = "*.esv";
 
+#ifdef MISTER_HYBRID
+    BUILDVFS_FIND_REC *findfiles_default = klistpath(*MiSTer_SaveDir() ? MiSTer_SaveDir() : DefaultPath, SavePattern, BUILDVFS_FIND_FILE);
+#else
     BUILDVFS_FIND_REC *findfiles_default = klistpath(DefaultPath, SavePattern, BUILDVFS_FIND_FILE);
+#endif
 
     // potentially overallocating but programmatically simple
     int const numfiles = countcache1dfind(findfiles_default);
@@ -868,7 +878,19 @@ int32_t G_SavePlayer(savebrief_t & sv, bool isAutoSave)
     }
     else
     {
+#ifdef MISTER_HYBRID
+        // in the game's folder of saved games, made if it is not there
+        char SaveName[BMAX_PATH];
+        Bsnprintf(SaveName, sizeof(SaveName), "%ssave0000.esv", MiSTer_SaveDir());
+        if (*MiSTer_SaveDir())
+        {
+            char dir[BMAX_PATH];
+            G_ModDirSnprintfLite(dir, ARRAY_SIZE(dir), MiSTer_SaveDir());
+            buildvfs_mkdir(dir, S_IRWXU);
+        }
+#else
         static char const SaveName[] = "save0000.esv";
+#endif
         int const len = G_ModDirSnprintfLite(fn, ARRAY_SIZE(fn), SaveName);
         if (len >= ARRAY_SSIZE(fn)-1)
         {
@@ -879,7 +901,7 @@ int32_t G_SavePlayer(savebrief_t & sv, bool isAutoSave)
         fil = savecounter.opennextfile(fn, zeros);
         savecounter.count++;
         // don't copy the mod dir into sv.path
-        Bstrcpy(sv.path, fn + (len-(ARRAY_SIZE(SaveName)-1)));
+        Bstrcpy(sv.path, fn + (len-(int)Bstrlen(SaveName)));
     }
 
     if (!fil)

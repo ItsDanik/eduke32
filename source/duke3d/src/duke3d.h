@@ -155,6 +155,10 @@ enum loguru_verbosities_game
 #include "sounds.h"
 #include "text.h"
 
+#ifdef MISTER_HYBRID
+#include "mister_port.h"
+#endif
+
 static inline int32_t G_TileHasActor(int const tileNum)
 {
     return g_tile[tileNum].execPtr!=NULL;

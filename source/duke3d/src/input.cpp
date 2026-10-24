@@ -110,6 +110,34 @@ int32_t I_MenuDown(void)
     return CONTROL_GetUserInput(nullptr)->dir == dir_Down || BUTTON(gamefunc_Move_Backward);
 }
 
+#ifdef MISTER_HYBRID
+void I_MenuUpClear(void)
+{
+    I_ClearLast();
+    CONTROL_ClearButton(gamefunc_Move_Forward);
+}
+
+void I_MenuDownClear(void)
+{
+    I_ClearLast();
+    CONTROL_ClearButton(gamefunc_Move_Backward);
+}
+
+void I_MenuLeftClear(void)
+{
+    I_ClearLast();
+    CONTROL_ClearButton(gamefunc_Turn_Left);
+    CONTROL_ClearButton(gamefunc_Strafe_Left);
+}
+
+void I_MenuRightClear(void)
+{
+    I_ClearLast();
+    CONTROL_ClearButton(gamefunc_Turn_Right);
+    CONTROL_ClearButton(gamefunc_Strafe_Right);
+}
+#endif
+
 int32_t I_MenuLeft(void) { return CONTROL_GetUserInput(nullptr)->dir == dir_Left || BUTTON(gamefunc_Turn_Left) || BUTTON(gamefunc_Strafe_Left); }
 int32_t I_MenuRight(void) { return CONTROL_GetUserInput(nullptr)->dir == dir_Right || BUTTON(gamefunc_Turn_Right) || BUTTON(gamefunc_Strafe_Right); }
 
@@ -121,13 +149,23 @@ int32_t I_PanelDown(void) { return I_MenuDown() || I_MenuRight() || KB_KeyPresse
 
 void I_PanelUpClear(void)
 {
+#ifdef MISTER_HYBRID
+    I_MenuUpClear();
+    I_MenuLeftClear();
+#else
     I_ClearLast();
+#endif
     KB_ClearKeyDown(sc_PgUp);
 }
 
 void I_PanelDownClear(void)
 {
+#ifdef MISTER_HYBRID
+    I_MenuDownClear();
+    I_MenuRightClear();
+#else
     I_ClearLast();
+#endif
     KB_ClearKeyDown(sc_PgDn);
 }
 

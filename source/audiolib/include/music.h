@@ -37,7 +37,7 @@ Modifications for JonoF's port by Jonathon Fowler (jf@jonof.id.au)
 
 extern int MUSIC_ErrorCode;
 
-#ifdef __linux__
+#ifdef AUDIOLIB_HAVE_ALSA
 #include <vector>
 
 struct alsa_mididevinfo_t

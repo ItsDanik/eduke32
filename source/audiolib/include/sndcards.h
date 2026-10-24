@@ -31,6 +31,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef __SNDCARDS_H
 #define __SNDCARDS_H
 
+// ALSA MIDI output: Linux, except the MiSTer hybrid core, whose Linux has no
+// ALSA (its music goes to the core: driver_misterfm)
+#if defined __linux__ && !defined MISTER_HYBRID
+# define AUDIOLIB_HAVE_ALSA
+#endif
+
 extern int ASS_PCMSoundDriver;
 extern int ASS_MIDISoundDriver;
 extern int ASS_EMIDICard;
@@ -43,6 +49,9 @@ typedef enum
     ASS_WinMM,
     ASS_SF2,
     ASS_ALSA,
+#ifdef MISTER_HYBRID
+    ASS_MisterFM,   // the core's FM chip, or its MIDI (driver_misterfm)
+#endif
     ASS_NumSoundCards,
     ASS_AutoDetect = -2
 } soundcardnames;
