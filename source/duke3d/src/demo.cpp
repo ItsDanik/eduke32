@@ -47,7 +47,15 @@ int32_t g_demo_showStats=1;
 static int32_t g_demo_soundToggle;
 
 static int32_t demo_hasdiffs, demorec_diffs=1, demorec_difftics = 2*REALGAMETICSPERSEC;
+#ifdef MISTER_HYBRID
+// The state a demo keeps every two seconds puts right one that went out of
+// step; loading it took the MiSTer 15 to 20ms, a frame missed every two
+// seconds. A demo of the same build plays the same without (cvar
+// demoplay_diffs).
+int32_t demoplay_diffs=0;
+#else
 int32_t demoplay_diffs=1;
+#endif
 int32_t demorec_diffs_cvar=1;
 int32_t demorec_force_cvar=0;
 int32_t demorec_difftics_cvar = 2*REALGAMETICSPERSEC;

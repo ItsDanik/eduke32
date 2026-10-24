@@ -454,7 +454,12 @@ static void cacheExtraTextureMaps(int tileNum, int type)
 
 void G_CacheMapData(void)
 {
+#ifdef MISTER_HYBRID
+    // a demo too, else its art is read from the SD card while it plays
+    if (!ud.config.useprecache)
+#else
     if (ud.recstat == 2 || !ud.config.useprecache)
+#endif
         return;
 
     cacheAllSounds();

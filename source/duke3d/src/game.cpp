@@ -788,6 +788,9 @@ static void G_ReadGLFrame(void)
 void G_DrawRooms(int32_t playerNum, int32_t smoothRatio)
 {
     MICROPROFILE_SCOPEI("Game", EDUKE32_FUNCTION, MP_YELLOWGREEN);
+#ifdef MISTER_PROFILE
+    MISTER_PROF_SCOPE(MPROF_DRAWROOMS);
+#endif
 
     auto const &thisPlayer = g_player[playerNum];
     auto const  pPlayer    = thisPlayer.ps;
@@ -3725,6 +3728,9 @@ static inline void G_DoEventAnimSprites(int tspriteNum)
 void G_DoSpriteAnimations(int32_t ourx, int32_t oury, int32_t ourz, int32_t oura, int32_t smoothratio)
 {
     MICROPROFILE_SCOPEI("Game", EDUKE32_FUNCTION, MP_YELLOWGREEN);
+#ifdef MISTER_PROFILE
+    MISTER_PROF_SCOPE(MPROF_SPRITEANIM);
+#endif
 
     UNREFERENCED_PARAMETER(ourz);
     int32_t j, frameOffset, playerNum;
@@ -7257,6 +7263,9 @@ MAIN_LOOP_RESTART:
 
 int G_DoMoveThings(void)
 {
+#ifdef MISTER_PROFILE
+    MISTER_PROF_SCOPE(MPROF_TICS);
+#endif
     ud.camerasprite = -1;
     lockclock += TICSPERFRAME;
 

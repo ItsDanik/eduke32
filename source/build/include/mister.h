@@ -83,6 +83,23 @@ extern uint32_t misterShownField;
 // being drawn is for, which the game's clock is the time of (timer.cpp).
 uint32_t misterField(void);
 
+// Profiling (make MISTER_PROFILE=1, never in a release): the time of each
+// part of a frame, and where the game thread is, sampled 1000 times a second
+// (sdlayer.cpp). MISTER_PROF_SCOPE(part) times the rest of the block; its
+// lines are in #ifdef MISTER_PROFILE.
+#ifdef MISTER_PROFILE
+enum { MPROF_TICS, MPROF_DRAWROOMS, MPROF_ROOMS, MPROF_MASKS, MPROF_SPRITEANIM, MPROF_HUD, MPROF_COPY, MPROF_PRESENT, MPROF_NUM };
+void misterProfAdd(int part, uint64_t ns);
+uint64_t misterProfNow(void);
+struct MisterProfScope
+{
+    int part; uint64_t t0;
+    MisterProfScope(int p) : part(p), t0(misterProfNow()) {}
+    ~MisterProfScope() { misterProfAdd(part, misterProfNow() - t0); }
+};
+#define MISTER_PROF_SCOPE(part) MisterProfScope misterProfScope_##part(part)
+#endif
+
 // The game's clock is the core's field counter (timer.cpp): 6.25MHz /
 // (400 * 262) = 59.64 fields per second.
 #define MISTER_FIELD_NUM 262

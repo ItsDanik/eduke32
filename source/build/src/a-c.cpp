@@ -15,6 +15,17 @@
 
 #ifdef ENGINE_USING_A_C
 
+// The MiSTer's Cortex-A9: four columns at once need more registers than it
+// has, and the compiler keeps most of them on the stack; columns one or two
+// at a time, in ARM code, draw the same pixels in two thirds of the time.
+#if defined MISTER_HYBRID && defined __arm__
+# define MISTER_ARM 1
+# define MISTER_ARM_CODE __attribute__((target("arm")))
+#else
+# define MISTER_ARM 0
+# define MISTER_ARM_CODE
+#endif
+
 #define BITSOFPRECISION 3
 #define BITSOFPRECISIONPOW 8
 
@@ -51,7 +62,7 @@ void sethlinesizes(int32_t logx, int32_t logy, intptr_t bufplc)
 { glogx = logx; glogy = logy; gbuf = (char *)bufplc; }
 void setpalookupaddress(char *paladdr) { ghlinepal = paladdr; }
 void setuphlineasm4(int32_t bxinc, int32_t byinc) { gbxinc = bxinc; gbyinc = byinc; }
-void hlineasm4(bssize_t cnt, int32_t skiploadincs, int32_t paloffs, uint32_t by, uint32_t bx, intptr_t p)
+MISTER_ARM_CODE void hlineasm4(bssize_t cnt, int32_t skiploadincs, int32_t paloffs, uint32_t by, uint32_t bx, intptr_t p)
 {
     Bassert(gbuf);
 
@@ -64,7 +75,7 @@ void hlineasm4(bssize_t cnt, int32_t skiploadincs, int32_t paloffs, uint32_t by,
     const vec2_t log32 = { 32-log.x, 32-log.y };
     char *pp = (char *)p;
 
-#ifdef CLASSIC_SLICE_BY_4
+#if defined CLASSIC_SLICE_BY_4 && !MISTER_ARM
     for (; cnt>=4; cnt-=4, pp-=4)
     {
 #if 1
@@ -248,8 +259,34 @@ static void vlineasm4nlogy(bssize_t cnt, char *p, char *const A_C_RESTRICT * pal
 #endif
 
 // cnt >= 1
-void vlineasm4(bssize_t cnt, char *p)
+MISTER_ARM_CODE void vlineasm4(bssize_t cnt, char *p)
 {
+#if MISTER_ARM
+    if (EDUKE32_PREDICT_TRUE(glogy))
+    {
+        // two columns at a time, a halfword stored
+        int32_t const logy = glogy, ourbpl = bpl;
+        for (int i = 0; i < 4; i += 2)
+        {
+            char const *const A_C_RESTRICT pal0 = (char const *)palookupoffse[i], *const A_C_RESTRICT buf0 = (char const *)bufplce[i];
+            char const *const A_C_RESTRICT pal1 = (char const *)palookupoffse[i+1], *const A_C_RESTRICT buf1 = (char const *)bufplce[i+1];
+            uint32_t vplc0 = vplce[i], vplc1 = vplce[i+1];
+            uint32_t const vinc0 = vince[i], vinc1 = vince[i+1];
+            char *A_C_RESTRICT pp = p + i;
+            for (bssize_t n = cnt; n > 0; n--)
+            {
+                *(uint16_t *)pp = (uint8_t)pal0[buf0[vplc0 >> logy]] | (uint8_t)pal1[buf1[vplc1 >> logy]] << 8;
+                vplc0 += vinc0;
+                vplc1 += vinc1;
+                pp += ourbpl;
+            }
+            vplce[i] = vplc0;
+            vplce[i+1] = vplc1;
+        }
+        return;
+    }
+#endif
+
     char * const A_C_RESTRICT pal[4] = {(char *)palookupoffse[0], (char *)palookupoffse[1], (char *)palookupoffse[2], (char *)palookupoffse[3]};
     char * const A_C_RESTRICT buf[4] = {(char *)bufplce[0], (char *)bufplce[1], (char *)bufplce[2], (char *)bufplce[3]};
 #ifdef USE_VECTOR_EXT
@@ -381,8 +418,35 @@ int32_t mvlineasm1(int32_t vinc, intptr_t paloffs, bssize_t cnt, uint32_t vplc, 
 }
 
 // cnt >= 1
-void mvlineasm4(bssize_t cnt, char *p)
+MISTER_ARM_CODE void mvlineasm4(bssize_t cnt, char *p)
 {
+#if MISTER_ARM
+    if (EDUKE32_PREDICT_TRUE(glogy))
+    {
+        // one column after the other
+        int32_t const logy = glogy, ourbpl = bpl, saturate = g_saturate;
+        for (int i = 0; i < 4; i++)
+        {
+            char const *const A_C_RESTRICT pal = (char const *)palookupoffse[i];
+            uint8_t const *const A_C_RESTRICT buf = (uint8_t const *)bufplce[i];
+            uint32_t vplc = vplce[i];
+            uint32_t const vinc = vince[i];
+            char *A_C_RESTRICT pp = p + i;
+            for (bssize_t n = cnt; n > 0; n--)
+            {
+                uint8_t const ch = buf[vplc >> logy];
+                if (ch != 255)
+                    *pp = pal[ch];
+                vplc += vinc;
+                vplc |= saturate & -(vplc < vinc);
+                pp += ourbpl;
+            }
+            vplce[i] = vplc;
+        }
+        return;
+    }
+#endif
+
     char *const A_C_RESTRICT pal[4] = {(char *)palookupoffse[0], (char *)palookupoffse[1], (char *)palookupoffse[2], (char *)palookupoffse[3]};
     char *const A_C_RESTRICT buf[4] = {(char *)bufplce[0], (char *)bufplce[1], (char *)bufplce[2], (char *)bufplce[3]};
 #ifdef USE_VECTOR_EXT

@@ -108,12 +108,52 @@ static inline uint64_t divideu64_branchfree(uint64_t const n, uint64_t const d)
     return libdivide_u64_branchfree_do(n, &udiv);
 }
 
+#if defined MISTER_HYBRID && defined __arm__
+// The MiSTer's Cortex-A9 has no integer division: a 64-bit one is a loop in
+// libgcc, and libdivide's divider for a new divisor (on 32 bits) takes two or
+// more of them, 1.5us. The FPU's double division gives the quotient of most
+// (a 32-bit one) in 0.4us, made exact with its remainder: the same results.
+static inline int64_t misterdivide64(int64_t const n, int64_t const d)
+{
+    uint64_t const un = n < 0 ? -(uint64_t)n : (uint64_t)n;
+    uint64_t const ud = d < 0 ? -(uint64_t)d : (uint64_t)d;
+    uint64_t q;
+
+    if (((un | ud) >> 32) == 0)
+        q = (uint32_t)un / (uint32_t)ud;
+    else
+    {
+        double const dq = ((double)(uint32_t)(un >> 32) * 4294967296.0 + (double)(uint32_t)un)
+                        / ((double)(uint32_t)(ud >> 32) * 4294967296.0 + (double)(uint32_t)ud);
+        if (EDUKE32_PREDICT_FALSE(!(dq < 4294967296.0)))
+            q = un / ud;
+        else
+        {
+            // off by one at most
+            q = (uint32_t)dq;
+            int64_t const r = (int64_t)(un - q * ud);
+            if (r < 0)
+                q--;
+            else if ((uint64_t)r >= ud)
+                q++;
+        }
+    }
+
+    return ((n ^ d) < 0) ? -(int64_t)q : (int64_t)q;
+}
+#endif
+
 static inline int64_t tabledivide64(int64_t const n, int64_t const d)
 {
     using namespace libdivide;
 
+#if defined MISTER_HYBRID && defined __arm__
+    if (!((uint64_t)d < DIVTABLESIZE))
+        return misterdivide64(n, d);
+#else
     if ((d != lastd_s64) & !((uint64_t)d < DIVTABLESIZE))
         divtable64[0] = libdivide_s64_gen((lastd_s64 = d));
+#endif
 
     return libdivide_s64_do(n, &divtable64[((uint64_t)d < DIVTABLESIZE) * d]);
 }
@@ -122,8 +162,14 @@ static inline int32_t tabledivide32(int32_t const n, int32_t const d)
 {
     using namespace libdivide;
 
+#if defined MISTER_HYBRID && defined __arm__
+    // libgcc's 32-bit division is quicker than a new divider (MiSTer)
+    if (!((uint32_t)d < DIVTABLESIZE))
+        return n / d;
+#else
     if ((d != lastd_s32) & !((uint32_t)d < DIVTABLESIZE))
         divtable32[0] = libdivide_s32_gen((lastd_s32 = d));
+#endif
 
     return libdivide_s32_do(n, &divtable32[((uint32_t)d < DIVTABLESIZE) * d]);
 }

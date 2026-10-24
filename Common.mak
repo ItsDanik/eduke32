@@ -372,6 +372,7 @@ MICROPROFILE := 0
 # "mister" drivers. The classic renderer alone, no network, nothing the
 # MiSTer's Linux does not have.
 MISTER_HYBRID ?= 0
+MISTER_PROFILE ?= 0
 ifneq (0,$(MISTER_HYBRID))
     override USE_OPENGL := 0
     override POLYMER := 0
@@ -849,6 +850,10 @@ COMPILERFLAGS += -DRENDERTYPE$(RENDERTYPE)=1
 
 ifneq (0,$(MISTER_HYBRID))
     COMPILERFLAGS += -DMISTER_HYBRID
+    # the profiling build (mister.h), for development only
+    ifneq (0,$(MISTER_PROFILE))
+        COMPILERFLAGS += -DMISTER_PROFILE
+    endif
 endif
 ifeq (0,$(NETCODE))
     COMPILERFLAGS += -DNETCODE_DISABLE

@@ -86,6 +86,155 @@ void (*misterCoreGone)(void);
 uint32_t misterShownField;
 int misterStickDpad = 1;
 
+#ifdef MISTER_PROFILE
+// The profiling build (mister.h). The parts of every frame are added up from
+// one frame shown to the next; a frame that took more than a field is printed
+// with its parts, and every 300 frames their averages and maxima. The game
+// thread is sampled 1000 times a second, its pc and lr (the caller, for a
+// function of libc) appended to /tmp/eduke32_prof.bin every 300 frames, with
+// a mark after each frame.
+#include <signal.h>
+#include <time.h>
+#include <ucontext.h>
+#include <sys/syscall.h>
+
+uint64_t misterProfNow(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000u + ts.tv_nsec;
+}
+
+static uint64_t profFrame[MPROF_NUM], profSum[MPROF_NUM], profMax[MPROF_NUM];
+static uint64_t profWorkSum, profWorkMax, profLastShown;
+static int profTics, profFrames, profMissed, profFieldsMissed;
+static uint32_t profLastField;
+static char const *const profNames[MPROF_NUM] = { "tics", "drawrooms", "rooms", "masks", "spriteanim", "hud", "copy", "present" };
+
+void misterProfAdd(int part, uint64_t ns)
+{
+    profFrame[part] += ns;
+    if (part == MPROF_TICS)
+        profTics++;
+}
+
+#define PROF_MAXSAMPLES (1 << 21)
+static uintptr_t *profSamples;
+static volatile uint32_t profNumSamples;
+static uint32_t profDumped;
+
+static void profSignal(int, siginfo_t *, void *context)
+{
+    ucontext_t const *uc = (ucontext_t const *)context;
+# if defined __arm__
+    uintptr_t const pc = uc->uc_mcontext.arm_pc, lr = uc->uc_mcontext.arm_lr;
+# elif defined __x86_64__
+    uintptr_t const pc = uc->uc_mcontext.gregs[REG_RIP], lr = 0;
+# else
+    uintptr_t const pc = 0, lr = 0;
+# endif
+    uint32_t const n = profNumSamples;
+    if (n + 2 <= PROF_MAXSAMPLES)
+    {
+        profSamples[n] = pc;
+        profSamples[n + 1] = lr;
+        profNumSamples = n + 2;
+    }
+}
+
+static void profStart(void)
+{
+    profSamples = (uintptr_t *)malloc(PROF_MAXSAMPLES * sizeof(uintptr_t));
+    unlink("/tmp/eduke32_prof.bin");
+
+    struct sigaction sa = {};
+    sa.sa_sigaction = profSignal;
+    sa.sa_flags = SA_SIGINFO | SA_RESTART;
+    sigaction(SIGPROF, &sa, NULL);
+
+    struct sigevent sev = {};
+    sev.sigev_notify = SIGEV_THREAD_ID;
+    sev.sigev_signo = SIGPROF;
+    sev._sigev_un._tid = syscall(SYS_gettid);
+    timer_t timer;
+    if (timer_create(CLOCK_MONOTONIC, &sev, &timer) == 0)
+    {
+        struct itimerspec its = { { 0, 1000000 }, { 0, 1000000 } };
+        timer_settime(timer, 0, &its, NULL);
+    }
+    LOG_F(INFO, "mister profile: sampling the game thread at 1000Hz");
+}
+
+static void profDump(void)
+{
+    uint32_t const n = profNumSamples;
+    if (FILE *f = fopen("/tmp/eduke32_prof.bin", "ab"))
+    {
+        fwrite(profSamples + profDumped, sizeof(uintptr_t), n - profDumped, f);
+        fclose(f);
+    }
+    profDumped = n;
+}
+
+// at the end of each frame shown: workStart..presentStart was its work
+static void profFrameShown(uint64_t presentStart, uint32_t field)
+{
+    uint64_t const now = misterProfNow();
+    uint32_t const fields = field - profLastField;
+
+    if (profLastShown && fields > 0)
+    {
+        uint64_t const work = presentStart - profLastShown;
+
+        // a mark in the samples after each frame: ~0, then its fields and work
+        uint32_t const n = profNumSamples;
+        if (n + 2 <= PROF_MAXSAMPLES)
+        {
+            profSamples[n] = ~(uintptr_t)0;
+            profSamples[n + 1] = (min(fields, 255u) << 24) | min<uint64_t>(work / 1000, 0xffffff);
+            profNumSamples = n + 2;
+        }
+
+        profFrames++;
+        profWorkSum += work;
+        profWorkMax = max(profWorkMax, work);
+        for (int i = 0; i < MPROF_NUM; i++)
+        {
+            profSum[i] += profFrame[i];
+            profMax[i] = max(profMax[i], profFrame[i]);
+        }
+        if (fields > 1)
+        {
+            profMissed++;
+            profFieldsMissed += fields - 1;
+            char buf[512];
+            int len = Bsnprintf(buf, sizeof(buf), "mister profile: %u fields at field %u, work %.1fms (%d tics):", fields, field, work * 1e-6, profTics);
+            for (int i = 0; i < MPROF_NUM; i++)
+                len += Bsnprintf(buf + len, sizeof(buf) - len, " %s %.1f", profNames[i], profFrame[i] * 1e-6);
+            LOG_F(INFO, "%s", buf);
+        }
+        if (profFrames == 300)
+        {
+            char buf[768];
+            int len = Bsnprintf(buf, sizeof(buf), "mister profile: 300 frames, %d missed a field (%d fields), work avg %.2f max %.1fms;",
+                                profMissed, profFieldsMissed, profWorkSum * 1e-6 / 300, profWorkMax * 1e-6);
+            for (int i = 0; i < MPROF_NUM; i++)
+                len += Bsnprintf(buf + len, sizeof(buf) - len, " %s %.2f/%.1f", profNames[i], profSum[i] * 1e-6 / 300, profMax[i] * 1e-6);
+            LOG_F(INFO, "%s", buf);
+            profFrames = profMissed = profFieldsMissed = 0;
+            profWorkSum = profWorkMax = 0;
+            memset(profSum, 0, sizeof(profSum));
+            memset(profMax, 0, sizeof(profMax));
+            profDump();
+        }
+    }
+    memset(profFrame, 0, sizeof(profFrame));
+    profTics = 0;
+    profLastField = field;
+    profLastShown = now;
+}
+#endif
+
 // Drawing ahead, decided by benchmark (CLAUDE.md of EDuke32_MiSTer).
 // MISTER_HYBRID_AHEAD=0 in the environment: every frame shown at the next
 // field, for comparing.
@@ -566,6 +715,9 @@ int main(int argc, char *argv[])
     // waiting for the field is ours when drawing ahead (videoShowFrame())
     misterAhead = MISTER_DRAW_AHEAD && !(getenv("MISTER_HYBRID_AHEAD") && atoi(getenv("MISTER_HYBRID_AHEAD")) == 0);
     SDL_SetHint("SDL_MISTER_VSYNC", misterAhead ? "0" : "1");
+#ifdef MISTER_PROFILE
+    profStart();
+#endif
 #endif
 
 #ifdef USE_OPENGL
@@ -2448,11 +2600,20 @@ void videoShowFrame(int32_t w)
             SDL_SetPaletteColors(sdl_surface->format->palette, colors, 0, 256);
             misterpalettechanged = 0;
         }
+#ifdef MISTER_PROFILE
+        uint64_t const profPresent = misterProfNow();
+        {
+            MISTER_PROF_SCOPE(MPROF_COPY);
+#endif
         auto in = (uint8_t const *)softsurface_getBuffer();
         auto out = (uint8_t *)sdl_surface->pixels;
         int const w = min(xdim, sdl_surface->w);
         for (int y = min(ydim, sdl_surface->h); y > 0; y--, in += xdim, out += sdl_surface->pitch)
             memcpy(out, in, w);
+#ifdef MISTER_PROFILE
+        }
+        MISTER_PROF_SCOPE(MPROF_PRESENT);
+#endif
         if (misterAhead && !MH_Interlaced())
         {
             // the next one is for the field after, and is not started before
@@ -2465,6 +2626,9 @@ void videoShowFrame(int32_t w)
         else
             SDL_UpdateWindowSurface(sdl_window);
         misterShownField = MH_FieldCounter();
+#ifdef MISTER_PROFILE
+        profFrameShown(profPresent, misterShownField);
+#endif
         return;
     }
 #endif

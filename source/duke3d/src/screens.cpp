@@ -912,6 +912,9 @@ static void G_PrintFPS(void)
 void G_DisplayRest(int32_t smoothratio)
 {
     MICROPROFILE_SCOPEI("Game", EDUKE32_FUNCTION, MP_YELLOWGREEN);
+#ifdef MISTER_PROFILE
+    MISTER_PROF_SCOPE(MPROF_HUD);
+#endif
 
     int32_t i, j;
     palaccum_t tint = PALACCUM_INITIALIZER;
