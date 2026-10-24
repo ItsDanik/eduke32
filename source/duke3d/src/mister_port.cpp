@@ -303,10 +303,20 @@ static const MiSTerGame Games[] = {
       "Nuclear Winter was not found. It needs NWINTER.GRP and DUKE3D.GRP of the Atomic "
       "Edition (1.4 or 1.5): copy both to %s/.",
       { DUKENW_CRC, (int32_t)0xC7EFBFA9 } },
+    { "DZ2", "DN3D: Duke!ZONE II", NULL,
+      "Duke!ZONE II was not found. It needs its GRP file (DUKEZONE2.GRP of Raze's "
+      "release, or the one of its CD) and DUKE3D.GRP of the full game: copy both to %s/.",
+      { (int32_t)0x3B29D5C7, DZ2_PP_CRC, (int32_t)0x1E9516F1, DZ2_13_CRC } },
+    { "PP", "DN3D: Penthouse Paradise", NULL,
+      "Penthouse Paradise was not found. It needs PENTHOUS.ZIP (or the GRP of ZOOM "
+      "Platform's release) and DUKE3D.GRP of the Atomic Edition (1.4 or 1.5): copy both "
+      "to %s/.",
+      { (int32_t)0x7CD82A3B, (int32_t)0xCF928A58 } },
 };
 #define NUM_GAMES ARRAY_SSIZE(Games)
 #define NO_GAME "No game data found. Copy DUKE3D.GRP of Duke Nukem 3D (the full game or " \
-    "the shareware) to %s/, and DUKEDC.GRP, VACATION.GRP or NWINTER.GRP for the add-ons."
+    "the shareware) to %s/, and the add-ons' files (DUKEDC.GRP, VACATION.GRP, NWINTER.GRP, " \
+    "DUKEZONE2.GRP, PENTHOUS.ZIP) next to it."
 
 #define MAX_GAMES 16
 
@@ -357,8 +367,8 @@ grpfile_t const *MiSTer_SelectGroup(void)
         games[n++] = game;
     }
     int const entries = n;
-    // the other add-ons of Duke Nukem 3D the game knows (Duke!ZONE II,
-    // Penthouse Paradise), for the list only
+    // the other add-ons of Duke Nukem 3D the game knows (one a .grpinfo file
+    // describes), for the list only
     for (grpfile_t const *grp = foundgrps; grp && n < MAX_GAMES; grp = grp->next)
     {
         int known = 0;
