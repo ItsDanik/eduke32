@@ -11901,14 +11901,16 @@ static void videoAllocateBuffers(void)
           { (void **)&dotp2, clamped_ydim * sizeof(intptr_t) },
           { (void **)&lastx, clamped_ydim * sizeof(int32_t) },
           { (void **)&mirrorBuffer, (size_t) (xdim * ydim)},
-          { (void **)&lookups, (ydim << 2) * (sizeof(lookups[0]) << 1) },
+          // also drawn into TILE_TILT with ydim 320 (dosetaspect()): screens
+          // of fewer lines (the MiSTer's 200 and 240) overran it there
+          { (void **)&lookups, (clamped_ydim << 2) * (sizeof(lookups[0]) << 1) },
       };
 
     for (i = 0; i < (signed)ARRAY_SIZE(dynarray); i++)
         *dynarray[i].ptr = Xrealloc(*dynarray[i].ptr, dynarray[i].size);
 
     horizlookup  = lookups;
-    horizlookup2 = lookups + (ydim << 2);
+    horizlookup2 = lookups + (clamped_ydim << 2);
     horizycent   = (ydim << 2) >> 1;
 
     ysavecnt = YSAVES;

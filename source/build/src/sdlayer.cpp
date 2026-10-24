@@ -84,6 +84,7 @@ char quitevent=0, appactive=1, novideo=0;
 #ifdef MISTER_HYBRID
 void (*misterCoreGone)(void);
 uint32_t misterShownField;
+int misterStickDpad = 1;
 
 // Drawing ahead, decided by benchmark (CLAUDE.md of EDuke32_MiSTer).
 // MISTER_HYBRID_AHEAD=0 in the environment: every frame shown at the next
@@ -981,7 +982,20 @@ static void misterJoyUpdate(void)
     if (button(MISTER_J1_MENUOK) || button(MISTER_JOY_MENUOK))     bits |= 1 << SDL_CONTROLLER_BUTTON_A;
     if (button(MISTER_J1_MENUBACK) || button(MISTER_JOY_MENUBACK)) bits |= 1 << SDL_CONTROLLER_BUTTON_B;
 
-    int const hat = SDL_JoystickGetHat(joydev, 0);
+    // Main_MiSTer presses the d-pad too when the left stick is out further
+    // than DPAD_THRESHOLD of MiSTer.ini (half way, 5% at the least): while
+    // playing, a direction the stick is out in is the stick's, which walks by
+    // its axes, not the d-pad's (misterStickDpad). 1024 is below any
+    // threshold.
+    int hat = SDL_JoystickGetHat(joydev, 0);
+    if (!misterStickDpad)
+    {
+        int const lx = SDL_JoystickGetAxis(joydev, 0), ly = SDL_JoystickGetAxis(joydev, 1);
+        if (lx < -1024) hat &= ~SDL_HAT_LEFT;
+        if (lx > 1024)  hat &= ~SDL_HAT_RIGHT;
+        if (ly < -1024) hat &= ~SDL_HAT_UP;
+        if (ly > 1024)  hat &= ~SDL_HAT_DOWN;
+    }
     if (hat & SDL_HAT_UP)   bits |= 1 << SDL_CONTROLLER_BUTTON_DPAD_UP;
     if (hat & SDL_HAT_DOWN) bits |= 1 << SDL_CONTROLLER_BUTTON_DPAD_DOWN;
 

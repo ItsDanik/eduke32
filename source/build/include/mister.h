@@ -67,6 +67,11 @@ extern int32_t rotatesprite_mister_yofs;
 // once, without its screens, wherever it is
 extern void (*misterCoreGone)(void);
 
+// 1 while the d-pad Main_MiSTer presses with the left stick counts (menus and
+// other screens), 0 while playing: the stick walks then, by its axes alone
+// (misterJoyUpdate() in sdlayer.cpp; the game sets it every frame)
+extern int misterStickDpad;
+
 // The field the last frame was shown at: a frame drawn before the next one
 // waits for it (SDL_MISTER_VSYNC)
 extern uint32_t misterShownField;

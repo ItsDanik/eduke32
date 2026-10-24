@@ -1222,6 +1222,11 @@ void G_DrawRooms(int32_t playerNum, int32_t smoothRatio)
 
                 tiltZoom = sintable[tiltZoom + 512] * 8 + sintable[tiltZoom] * 5;
                 tiltZoom >>= tiltcs;  // JBF 20030807
+#ifdef MISTER_HYBRID
+                // 2D art is 200 lines in the middle of 240: the view fills them all
+                if (MH_IsOpen() && ydim > 200)
+                    tiltZoom = tiltZoom * ydim / 200;
+#endif
 
                 rotatesprite_win(160 << 16, 100 << 16, tiltZoom, tang + 512, TILE_TILT, 0, 0, 4 + 2 + 64 + 1024);
                 walock[TILE_TILT] = CACHE1D_FREE;

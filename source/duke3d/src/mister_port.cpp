@@ -260,6 +260,10 @@ void MiSTer_UpdateOptions(void)
     UpdateResolution();
     UpdateSticks();
     UpdateCheats();
+    // the d-pad Main_MiSTer presses with the left stick moves the menus, and
+    // not the player, whom the stick moves itself
+    int const gm = g_player[myconnectindex].ps->gm;
+    misterStickDpad = (gm & MODE_MENU) || !(gm & MODE_GAME) || (gm & (MODE_DEMO | MODE_EOL));
 }
 
 // The player came through the list: quitting a game goes back to it
