@@ -44,7 +44,10 @@
 //////////
 // Compilation switches for optional/extended engine features
 
-#if !defined(__arm__) && !defined(GEKKO)
+// The MiSTer's ARM too: without it a sprite's texture row overflows with the
+// view tilted up and the drawing reads other columns of the tile (E1L1's
+// billboard striped by its own frame, the stripes moving as the view turns)
+#if (!defined(__arm__) || defined MISTER_HYBRID) && !defined(GEKKO)
 # define HIGH_PRECISION_SPRITE
 #endif
 
