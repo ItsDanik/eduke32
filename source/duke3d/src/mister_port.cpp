@@ -274,8 +274,9 @@ static char SaveDir[BMAX_PATH];
 // shareware that Duke Nukem 3D's entry starts when the full game is not
 // there: the game's own kinds of GRP file (grpscan.cpp), which it knows by
 // their checksum, whatever their name, each the first of its list that was
-// found. The add-ons need the full game's GRP of their version as well: the
-// game drops those whose full game it did not find.
+// found, or one of a version it does not know by the name its own GRPINFO
+// gives it. The add-ons need the full game's GRP of their version as well:
+// the game drops those whose full game it did not find.
 struct MiSTerGame
 {
     const char *id;
@@ -283,6 +284,7 @@ struct MiSTerGame
     const char *shareware_of;
     const char *missing;
     int32_t crc[8];
+    const char *grpname;
 };
 static const MiSTerGame Games[] = {
     { "DN3D", "Duke Nukem 3D", NULL,
@@ -304,9 +306,10 @@ static const MiSTerGame Games[] = {
       "Edition (1.4 or 1.5): copy both to %s/.",
       { DUKENW_CRC, (int32_t)0xC7EFBFA9 } },
     { "DZ2", "DN3D: Duke!ZONE II", NULL,
-      "Duke!ZONE II was not found. It needs its GRP file (DUKEZONE2.GRP of Raze's "
-      "release, or the one of its CD) and DUKE3D.GRP of the full game: copy both to %s/.",
-      { (int32_t)0x3B29D5C7, DZ2_PP_CRC, (int32_t)0x1E9516F1, DZ2_13_CRC } },
+      "Duke!ZONE II was not found. Copy NightFright's dukezone2 folder (or its "
+      "DUKEZONE2.GRP, or the GRP of the CD) to %s/, with DUKE3D.GRP of the full game.",
+      { (int32_t)0x9BA30F03, (int32_t)0x3B29D5C7, DZ2_PP_CRC, (int32_t)0x1E9516F1, DZ2_13_CRC },
+      "Duke!Zone II" },
     { "PP", "DN3D: Penthouse Paradise", NULL,
       "Penthouse Paradise was not found. It needs PENTHOUS.ZIP (or the GRP of ZOOM "
       "Platform's release) and DUKE3D.GRP of the Atomic Edition (1.4 or 1.5): copy both "
@@ -340,6 +343,9 @@ grpfile_t const *MiSTer_SelectGroup(void)
 
         for (int i = 0; i < 8 && g.crc[i] && !grp; i++)
             grp = FindGroup(g.crc[i]);
+        for (grpfile_t const *f = foundgrps; f && !grp && g.grpname; f = f->next)
+            if ((f->type->game & GAMEFLAG_ADDON) && !Bstrcasecmp(f->type->name, g.grpname))
+                grp = f;
         if (!grp && !g.missing)
             continue;
         mh_game game = { g.id, g.name, MH_NOT_THERE, g.shareware_of, g.missing };
@@ -348,7 +354,7 @@ grpfile_t const *MiSTer_SelectGroup(void)
             // its GRP file for the lines under the logo ("Checking Game Data..."),
             // in the game's folder or where Megaton Edition has its add-ons
             // (G_AddMiSTerSearchPaths())
-            static char const *const dirs[] = { "", "addons/dc/", "addons/nw/", "addons/vacation/" };
+            static char const *const dirs[] = { "", "addons/dc/", "addons/nw/", "addons/vacation/", "dukezone2/" };
             static char paths[MAX_GAMES][BMAX_PATH];
             game.files = none;
             for (char const *dir : dirs)
@@ -376,8 +382,11 @@ grpfile_t const *MiSTer_SelectGroup(void)
         if ((grp->type->game & (GAMEFLAG_DUKE | GAMEFLAG_ADDON)) != (GAMEFLAG_DUKE | GAMEFLAG_ADDON))
             continue;
         for (auto const &g : Games)
+        {
             for (int i = 0; i < 8 && g.crc[i]; i++)
                 known |= g.crc[i] == grp->type->crcval;
+            known |= g.grpname && !Bstrcasecmp(g.grpname, grp->type->name);
+        }
         for (int i = 0; i < n; i++)
             known |= of[i] && !Bstrcmp(games[i].name, grp->type->name);
         if (known)

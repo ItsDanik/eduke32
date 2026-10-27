@@ -592,13 +592,14 @@ static void Duke_AddSteamPaths(const char *basepath)
 
 #ifdef MISTER_HYBRID
 // Megaton Edition's add-ons, as they are in its folder (gameroot), which a
-// player copies whole into the game's (the current folder, -usecwd)
+// player copies whole into the game's (the current folder, -usecwd), and
+// Duke!ZONE II's folder of NightFright's release (its -jdukezone2)
 void G_AddMiSTerSearchPaths(void)
 {
     char cwd[BMAX_PATH];
     if (!buildvfs_getcwd(cwd, sizeof(cwd)))
         return;
-    static char const *const addons[] = { "addons/dc", "addons/nw", "addons/vacation" };
+    static char const *const addons[] = { "addons/dc", "addons/nw", "addons/vacation", "dukezone2" };
     for (char const *addon : addons)
     {
         char path[BMAX_PATH];

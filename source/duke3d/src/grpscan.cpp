@@ -68,9 +68,12 @@ static internalgrpinfo_t const internalgrpfiles[] =
     { "Duke!ZONE II",                          DZ2_PP_CRC,  44100411, GAMEFLAG_DUKE|GAMEFLAG_ADDON, DUKE15_CRC, "DZ-GAME.CON", NULL},
     { "Duke!ZONE II",                          (int32_t) 0x1E9516F1,  3186656, GAMEFLAG_DUKE|GAMEFLAG_ADDON, DUKE15_CRC, "DZ-GAME.CON", NULL},
 #ifdef MISTER_HYBRID
-    // MiSTer: Raze's release (a zip, 21 levels), also without the
-    // DUKEZONE2.GRPINFO that comes with it
+    // MiSTer: NightFright's releases of 21 levels, also without the
+    // DUKEZONE2.GRPINFO that comes with them: v2.0.5 (a zip) and the
+    // Playability Edit v2.21 (2024), for the Atomic Edition or World Tour
     { "Duke!ZONE II",                          (int32_t) 0x3B29D5C7,  737523, GAMEFLAG_DUKE|GAMEFLAG_ADDON, DUKE15_CRC, "dukezone2.con", NULL},
+    { "Duke!ZONE II",                          (int32_t) 0x9BA30F03, 2967845, GAMEFLAG_DUKE|GAMEFLAG_ADDON, DUKE15_CRC, NULL, NULL},
+    { "Duke!ZONE II",                          (int32_t) 0x9BA30F03, 2967845, GAMEFLAG_DUKE|GAMEFLAG_ADDON, DUKEWT_CRC, NULL, NULL},
 #endif
     { "Duke Nukem's Penthouse Paradise",       (int32_t) 0x7CD82A3B,  2112419, GAMEFLAG_DUKE|GAMEFLAG_ADDON, DUKE15_CRC, "ppakgame.con", NULL}, // original .zip release
     { "Duke Nukem's Penthouse Paradise",       (int32_t) 0xCF928A58,  4247491, GAMEFLAG_DUKE|GAMEFLAG_ADDON, DUKE15_CRC, "PPAKGAME.CON", NULL}, // ZOOM Platform repacked .grp
@@ -518,6 +521,22 @@ int32_t ScanGroups(void)
         {
             if (FindGroup(grp->type->dependency) == NULL) // couldn't find dependency
             {
+#ifdef MISTER_HYBRID
+                // MiSTer: another description of the same file whose game is
+                // there (Duke!ZONE II comes with a GRPINFO for the Atomic
+                // Edition and one for World Tour, and players copy both)
+                grpinfo_t const *other = listgrps;
+                for (; other; other = other->next)
+                    if (other->crcval == grp->type->crcval && other->size == grp->type->size &&
+                        (!other->dependency || FindGroup(other->dependency)))
+                        break;
+                if (other)
+                {
+                    grp->type = other;
+                    grp = grp->next;
+                    continue;
+                }
+#endif
                 //initprintf("removing %s\n", grp->name);
                 RemoveGroup(grp);
                 grp = foundgrps;
