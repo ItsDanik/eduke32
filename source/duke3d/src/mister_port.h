@@ -24,6 +24,10 @@ grpfile_t const *MiSTer_SelectGroup(void);
 // loads, another's (savegame.cpp)
 char const *MiSTer_SaveDir(void);
 
+// A level's map is loaded, its sprites not yet set up: mends what is wrong in
+// the map itself (premap.cpp)
+void MiSTer_FixMap(void);
+
 // The video mode the OSD's Resolution says: the size of the game's screen
 void MiSTer_ScreenSize(int32_t *x, int32_t *y);
 // Once per frame, in the game's loops: the OSD options that apply while the

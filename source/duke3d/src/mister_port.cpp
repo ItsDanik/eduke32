@@ -420,6 +420,28 @@ char const *MiSTer_SaveDir(void)
     return SaveDir;
 }
 
+void MiSTer_FixMap(void)
+{
+    // Penthouse Paradise, ppakpent.map: a third transporter on each of the two
+    // pairs that join the ocean's surface and its water, which PENTHOUS.MAP
+    // (the level for 1.3D) does not have. A transporter goes to the first
+    // sprite of its hitag, so these took the player who swam up back to the
+    // bottom, or out of the map from the deep water around them.
+    static const struct { int16_t spriteNum, hitag; vec3_t pos; } Strays[] = {
+        { 1, 39, { 36480, 25728, 8192 } },
+        { 2, 40, { 35200, 25728, 8192 } },
+    };
+
+    for (auto const &stray : Strays)
+    {
+        auto const &s = sprite[stray.spriteNum];
+
+        if (s.statnum < MAXSTATUS && s.picnum == SECTOREFFECTOR && s.lotag == SE_7_TELEPORT && s.hitag == stray.hitag
+            && s.x == stray.pos.x && s.y == stray.pos.y && s.z == stray.pos.z)
+            deletesprite(stray.spriteNum);
+    }
+}
+
 // Runs after everything else of exit(), whichever of the game's ways out was
 // taken
 static void ExitWithCode(void)

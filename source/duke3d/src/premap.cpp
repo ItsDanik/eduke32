@@ -2018,6 +2018,9 @@ int G_EnterLevel(int gameMode)
 
     Net_NotifyNewGame();
 
+#ifdef MISTER_HYBRID
+    MiSTer_FixMap();
+#endif
 
     prelevel(gameMode);
 
