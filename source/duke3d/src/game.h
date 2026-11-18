@@ -176,6 +176,8 @@ typedef struct {
 
     int32_t entered_name,screen_tilting,shadows,fta_on,executions,auto_run;
     int32_t coords,showfps,levelstats,m_coop,coop,screen_size,lockout,crosshair;
+    // MiSTer: A.W.O.L.'s options, read by its scripts (userdef[].adsmode ...)
+    int32_t adsmode, subtitles, weather, particles, text_speed, perf_mdl;
     int32_t playerai,obituaries;
 
     int32_t respawn_monsters,respawn_items,respawn_inventory,recstat,monsters_off,brightness;

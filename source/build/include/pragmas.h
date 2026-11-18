@@ -109,6 +109,24 @@ static inline uint64_t divideu64_branchfree(uint64_t const n, uint64_t const d)
 }
 
 #if defined MISTER_HYBRID && defined __arm__
+// A 32-bit division on the FPU too: libgcc's __udivsi3 is a loop (125ns),
+// the double division with the fix-up 81ns. A 32-bit value is exact in a
+// double, so the quotient is off by one at most and the remainder tells.
+static inline uint32_t misterdivideu32(uint32_t const n, uint32_t const d)
+{
+    if (d > 0x7fffffffu)
+        return n >= d;
+
+    uint32_t q = (uint32_t)((double)n / (double)d);
+    uint32_t const r = n - q * d;
+
+    if ((int32_t)r < 0)
+        q--;
+    else if (r >= d)
+        q++;
+    return q;
+}
+
 // The MiSTer's Cortex-A9 has no integer division: a 64-bit one is a loop in
 // libgcc, and libdivide's divider for a new divisor (on 32 bits) takes two or
 // more of them, 1.5us. The FPU's double division gives the quotient of most
@@ -120,7 +138,7 @@ static inline int64_t misterdivide64(int64_t const n, int64_t const d)
     uint64_t q;
 
     if (((un | ud) >> 32) == 0)
-        q = (uint32_t)un / (uint32_t)ud;
+        q = misterdivideu32((uint32_t)un, (uint32_t)ud);
     else
     {
         double const dq = ((double)(uint32_t)(un >> 32) * 4294967296.0 + (double)(uint32_t)un)
@@ -163,9 +181,12 @@ static inline int32_t tabledivide32(int32_t const n, int32_t const d)
     using namespace libdivide;
 
 #if defined MISTER_HYBRID && defined __arm__
-    // libgcc's 32-bit division is quicker than a new divider (MiSTer)
+    // the FPU's division is quicker than a new divider or libgcc's loop (MiSTer)
     if (!((uint32_t)d < DIVTABLESIZE))
-        return n / d;
+    {
+        uint32_t const q = misterdivideu32(n < 0 ? 0u - (uint32_t)n : (uint32_t)n, d < 0 ? 0u - (uint32_t)d : (uint32_t)d);
+        return ((n ^ d) < 0) ? -(int32_t)q : (int32_t)q;
+    }
 #else
     if ((d != lastd_s32) & !((uint32_t)d < DIVTABLESIZE))
         divtable32[0] = libdivide_s32_gen((lastd_s32 = d));

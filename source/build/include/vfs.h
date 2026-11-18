@@ -154,6 +154,28 @@ static FORCE_INLINE int buildvfs_isdir(char const *path)
 }
 #define buildvfs_unlink(path) unlink(path)
 
+#ifdef MISTER_HYBRID
+// The cache of findfrompath()'s answers (pathcache.h) is flushed whenever the
+// game creates or deletes a file or a folder, or changes folder: what it
+// wrote is found by the next search.
+void vfs_pathcache_flush(void);
+void vfs_pathcache_report(void);
+# undef buildvfs_fopen_write
+# undef buildvfs_fopen_write_text
+# undef buildvfs_fopen_append
+# undef buildvfs_open_write
+# undef buildvfs_chdir
+# undef buildvfs_mkdir
+# undef buildvfs_unlink
+# define buildvfs_fopen_write(fn) (vfs_pathcache_flush(), fopen((fn), "wb"))
+# define buildvfs_fopen_write_text(fn) (vfs_pathcache_flush(), fopen((fn), "w"))
+# define buildvfs_fopen_append(fn) (vfs_pathcache_flush(), fopen((fn), "ab+"))
+# define buildvfs_open_write(fn) (vfs_pathcache_flush(), open((fn), O_BINARY|O_TRUNC|O_CREAT|O_WRONLY, S_IREAD|S_IWRITE))
+# define buildvfs_chdir(dir) (vfs_pathcache_flush(), chdir(dir))
+# define buildvfs_mkdir(dir, x) (vfs_pathcache_flush(), Bmkdir(dir, x))
+# define buildvfs_unlink(path) (vfs_pathcache_flush(), unlink(path))
+#endif
+
 #endif
 
 #define MAYBE_FCLOSE_AND_NULL(fileptr) do { \

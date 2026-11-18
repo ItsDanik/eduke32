@@ -267,8 +267,14 @@ void CONFIG_SetDefaults(void)
     ud.config.MasterVolume    = 255;
     ud.config.FXVolume        = 255;
     ud.config.VoiceVolume     = 255;
+#ifdef MISTER_HYBRID
+    // MiSTer: a gamepad game; weighted aiming and view centering all the way
+    ud.config.JoystickAimWeight = 8;
+    ud.config.JoystickViewCentering = 8;
+#else
     ud.config.JoystickAimWeight = 4;
     ud.config.JoystickViewCentering = 4;
+#endif
     ud.config.JoystickAimAssist = 1;
     ud.config.MouseBias       = 0;
     ud.config.MusicDevice     = ASS_AutoDetect;
@@ -288,10 +294,18 @@ void CONFIG_SetDefaults(void)
     ud.crosshairscale         = 50;
     ud.default_skill          = 1;
     ud.democams               = 1;
+#ifdef MISTER_HYBRID
+    ud.detail                 = 2;  // MiSTer: the 3D view drawn at half size and doubled
+#else
     ud.detail                 = 0;
+#endif
     ud.display_bonus_screen   = 1;
     ud.drawweapon             = 1;
+#ifdef MISTER_HYBRID
+    ud.fov                    = 120; // MiSTer: the widest the menu allows
+#else
     ud.fov                    = 90;
+#endif
     ud.fta_on                 = 1;
     ud.god                    = 0;
     ud.hudontop               = 0;
@@ -331,6 +345,14 @@ void CONFIG_SetDefaults(void)
     ud.weaponscale            = 100;
     ud.weaponsway             = 1;
     ud.weaponswitch           = 3;  // new+empty
+    // MiSTer: A.W.O.L.'s options at its defaults (ADS toggles, subtitles on,
+    // weather normal, particles on, text speed normal, 3D models on)
+    ud.adsmode                = 0;
+    ud.subtitles              = 1;
+    ud.weather                = 2;
+    ud.particles              = 1;
+    ud.text_speed             = 2;
+    ud.perf_mdl               = 1;
 
     Bstrcpy(ud.rtsname, G_DefaultRtsFile());
 
@@ -657,8 +679,13 @@ void CONFIG_SetGameControllerDefaults()
         digitalAxis.apply();
 
     ud.config.JoystickAimAssist     = 1;
+#ifdef MISTER_HYBRID
+    ud.config.JoystickAimWeight     = 8;
+    ud.config.JoystickViewCentering = 8;
+#else
     ud.config.JoystickAimWeight     = 4;
     ud.config.JoystickViewCentering = 4;
+#endif
     ud.config.controllerRumble = 1;
     return;
 #endif
@@ -716,8 +743,13 @@ void CONFIG_SetGameControllerDefaults()
         digitalAxis.apply();
 
     ud.config.JoystickAimAssist     = 1;
+#ifdef MISTER_HYBRID
+    ud.config.JoystickAimWeight     = 8;
+    ud.config.JoystickViewCentering = 8;
+#else
     ud.config.JoystickAimWeight     = 4;
     ud.config.JoystickViewCentering = 4;
+#endif
     ud.config.controllerRumble = 1;
 }
 

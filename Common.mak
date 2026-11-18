@@ -1015,7 +1015,12 @@ ifeq ($(PLATFORM),WINDOWS)
 else ifeq ($(PLATFORM),WII)
     LIBS += -laesnd_tueidj -lfat -lwiiuse -lbte -lwiikeyboard -logc
 else ifeq ($(SUBPLATFORM),LINUX)
-    LIBS += -lrt -latomic
+    ifneq (0,$(MISTER_HYBRID))
+        # linked in: the MiSTer's Linux has no libatomic.so.1
+        LIBS += -lrt -l:libatomic.a
+    else
+        LIBS += -lrt -latomic
+    endif
 endif
 
 ifeq (,$(filter $(PLATFORM),WINDOWS WII))

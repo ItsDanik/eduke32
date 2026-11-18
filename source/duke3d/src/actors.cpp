@@ -4236,6 +4236,7 @@ ACTOR_STATIC void G_MoveActors(void)
 
     while (spriteNum >= 0)
     {
+        MISTER_RENDER_POLL();
         int const  nextSprite = nextspritestat[spriteNum];
         auto const pSprite    = &sprite[spriteNum];
         int const  sectNum    = pSprite->sectnum;
@@ -6431,6 +6432,7 @@ ACTOR_STATIC void G_MoveEffectors(void)   //STATNUM 3
 #endif
     while (spriteNum >= 0)
     {
+        MISTER_RENDER_POLL();
         int const  nextSprite = nextspritestat[spriteNum];
         auto const pSprite    = &sprite[spriteNum];
         int32_t    playerDist;
@@ -9343,6 +9345,8 @@ void G_MoveWorld(void)
     VM_OnEvent(EVENT_PREWORLD);
     G_DoEventGame(EVENT_PREGAME, false);
     G_RecordOldSpritePos();
+    MISTER_RENDER_POLL();
+    MISTER_TRACE(mainWorldPhase, 1);
 
     {
         MICROPROFILE_SCOPEI("MoveWorld", "MoveZombieActors", MP_YELLOW2);
@@ -9363,6 +9367,8 @@ void G_MoveWorld(void)
         MICROPROFILE_SCOPEI("MoveWorld", "MovePlayers", MP_YELLOW);
         G_MovePlayers();  //ST 10
     }
+    MISTER_RENDER_POLL();
+    MISTER_TRACE(mainWorldPhase, 2);
 
     // Must be called here to fix a problem where SE7 Transports and Touchplates do not activate concurrently
     G_RecordOldSpritePosForStatnum(STAT_PLAYER);
@@ -9376,6 +9382,8 @@ void G_MoveWorld(void)
         MICROPROFILE_SCOPEI("MoveWorld", "MoveMisc", MP_YELLOW3);
         G_MoveMisc();  //ST 5
     }
+    MISTER_RENDER_POLL();
+    MISTER_TRACE(mainWorldPhase, 3);
 
     double actorsTime = timerGetFractionalTicks();
     auto framecnt2 = g_frameCounter;
@@ -9384,6 +9392,8 @@ void G_MoveWorld(void)
         MICROPROFILE_SCOPEI("MoveWorld", "MoveActors", MP_YELLOW4);
         G_MoveActors();  //ST 1
     }
+    MISTER_RENDER_POLL();
+    MISTER_TRACE(mainWorldPhase, 4);
 
     actorsTime = timerGetFractionalTicks() - actorsTime;
 
@@ -9402,18 +9412,26 @@ void G_MoveWorld(void)
         MICROPROFILE_SCOPEI("MoveWorld", "MoveEffectors", MP_YELLOW);
         G_MoveEffectors();  //ST 3
     }
+    MISTER_RENDER_POLL();
+    MISTER_TRACE(mainWorldPhase, 5);
 
     {
         MICROPROFILE_SCOPEI("MoveWorld", "MoveStandables", MP_YELLOW2);
         G_MoveStandables();  //ST 6
     }
+    MISTER_RENDER_POLL();
+    MISTER_TRACE(mainWorldPhase, 6);
 
     VM_OnEvent(EVENT_WORLD);
+    MISTER_RENDER_POLL();
+    MISTER_TRACE(mainWorldPhase, 7);
 
     G_DoEventGame(EVENT_GAME);
 
     G_RefreshLights();
     G_DoSectorAnimations();
+    MISTER_RENDER_POLL();
+    MISTER_TRACE(mainWorldPhase, 8);
 
     {
         MICROPROFILE_SCOPEI("MoveWorld", "MoveFX", MP_YELLOW3);

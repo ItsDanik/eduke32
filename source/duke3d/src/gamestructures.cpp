@@ -1121,6 +1121,13 @@ memberlabel_t const UserdefsLabels[]=
     { "gamepadactive",          USERDEFS_GAMEPADACTIVE,          0, 0, -1 },
     { "m_newgamecustom",        USERDEFS_M_NEWGAMECUSTOM,        0, 0, -1 },
     { "m_newgamecustomsub",     USERDEFS_M_NEWGAMECUSTOMSUB,     0, 0, -1 },
+    // MiSTer: A.W.O.L.'s options
+    { "adsmode",                USERDEFS_ADSMODE,                0, 0, -1 },
+    { "subtitles",              USERDEFS_SUBTITLES,              0, 0, -1 },
+    { "weather",                USERDEFS_WEATHER,                0, 0, -1 },
+    { "particles",              USERDEFS_PARTICLES,              0, 0, -1 },
+    { "text_speed",             USERDEFS_TEXTSPEED,              0, 0, -1 },
+    { "perf_mdl",               USERDEFS_PERF_MDL,               0, 0, -1 },
     { "m_newgamecustoml3",      USERDEFS_M_NEWGAMECUSTOML3,      0, 0, -1 },
     { "kick_mode",              USERDEFS_KICK_MODE,              0, 0, -1 },
 };
@@ -1317,6 +1324,12 @@ int32_t __fastcall VM_GetUserdef(int32_t labelNum, int const lParm2)
         case USERDEFS_GAMEPADACTIVE:          labelNum = (CONTROL_LastSeenInput == LastSeenInput::Joystick); break;
         case USERDEFS_M_NEWGAMECUSTOM:        labelNum = ud.m_newgamecustom;              break;
         case USERDEFS_M_NEWGAMECUSTOMSUB:     labelNum = ud.m_newgamecustomsub;           break;
+        case USERDEFS_ADSMODE:                labelNum = ud.adsmode;                      break;
+        case USERDEFS_SUBTITLES:              labelNum = ud.subtitles;                    break;
+        case USERDEFS_WEATHER:                labelNum = ud.weather;                      break;
+        case USERDEFS_PARTICLES:              labelNum = ud.particles;                    break;
+        case USERDEFS_TEXTSPEED:              labelNum = ud.text_speed;                   break;
+        case USERDEFS_PERF_MDL:               labelNum = ud.perf_mdl;                     break;
         case USERDEFS_M_NEWGAMECUSTOML3:      labelNum = ud.m_newgamecustoml3;           break;
         case USERDEFS_KICK_MODE:              labelNum = ud.kick_mode;                    break;
 
@@ -1386,6 +1399,12 @@ void __fastcall VM_SetUserdef(int const labelNum, int const lParm2, int32_t cons
             break;
         case USERDEFS_LOCKOUT:                      ud.lockout                       = iSet; break;
         case USERDEFS_CROSSHAIR:                    ud.crosshair                     = iSet; break;
+        case USERDEFS_ADSMODE:                      ud.adsmode                       = iSet; break;
+        case USERDEFS_SUBTITLES:                    ud.subtitles                     = iSet; break;
+        case USERDEFS_WEATHER:                      ud.weather                       = iSet; break;
+        case USERDEFS_PARTICLES:                    ud.particles                     = iSet; break;
+        case USERDEFS_TEXTSPEED:                    ud.text_speed                    = iSet; break;
+        case USERDEFS_PERF_MDL:                     ud.perf_mdl                      = iSet; break;
         case USERDEFS_PLAYERAI:                     ud.playerai                      = iSet; break;
         case USERDEFS_RESPAWN_MONSTERS:             ud.respawn_monsters              = iSet; break;
         case USERDEFS_RESPAWN_ITEMS:                ud.respawn_items                 = iSet; break;

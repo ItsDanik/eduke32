@@ -40,7 +40,8 @@ extern int g_useCwd;
 #define GAMEFLAG_STANDALONE 0x00000100
 #define GAMEFLAG_NOCLASSIC  0x00000200
 #define GAMEFLAG_NOPOLYMER  0x00000400
-#define GAMEFLAGMASK        0x000007FF // flags allowed from grpinfo
+#define GAMEFLAG_AWOL       0x00000800 // MiSTer: A.W.O.L. (its awol.grpinfo: DUKE|FURY|AWOL)
+#define GAMEFLAGMASK        0x00000FFF // flags allowed from grpinfo
 
 extern struct grpfile_t const *g_selectedGrp;
 
@@ -55,6 +56,7 @@ extern int     g_addonNum;
 #define SHAREWARE           (g_gameType & GAMEFLAG_SHAREWARE)
 #define DUKEBETA            ((g_gameType & GAMEFLAG_DUKEBETA) == GAMEFLAG_DUKEBETA)
 #define FURY                (g_gameType & GAMEFLAG_FURY)
+#define AWOL                (g_gameType & GAMEFLAG_AWOL)
 
 // statements using STANDALONE_EVAL(false, ...) are expected to be optimized away entirely in EDUKE32_STANDALONE builds
 #ifdef EDUKE32_STANDALONE

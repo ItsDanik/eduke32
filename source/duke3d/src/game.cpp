@@ -249,6 +249,40 @@ void G_HandleSpecialKeys(void)
 }
 
 #ifdef MISTER_HYBRID
+// The most game ticks run before a frame is drawn (MISTER_HYBRID_MAXTICS,
+// default 2, 0: no limit). A tick that takes longer than its 33ms otherwise
+// makes the loop fall further behind with every frame, and frames stop.
+// "auto": paced by the renderer on the other CPU (mister_port.cpp): one tick,
+// and a second only while the last view is still being drawn.
+static int misterAutoTics;
+
+static int misterMaxTics(void)
+{
+    static int maxTics = -1;
+    if (maxTics < 0)
+    {
+        char const *env = getenv("MISTER_HYBRID_MAXTICS");
+        misterAutoTics = env && Bstrcasecmp(env, "auto") == 0;
+        maxTics = misterAutoTics ? 2 : env ? max(atoi(env), 0) : 2;
+        if (misterAutoTics)
+            LOG_F(INFO, "mister: game tics a frame paced by the renderer, at most %d (MISTER_HYBRID_MAXTICS=auto)", maxTics);
+        else
+            LOG_F(INFO, "mister: at most %d game tics a frame (MISTER_HYBRID_MAXTICS)", maxTics);
+    }
+    return maxTics;
+}
+
+// Another tick before the frame, `done` run so far
+static int misterMoreTics(int done)
+{
+    int const cap = misterMaxTics();
+    if (misterAutoTics)
+        return done < 1 || (done < cap && MiSTer_RenderBusy());
+    return cap == 0 || done < cap;
+}
+#endif
+
+#ifdef MISTER_HYBRID
 // The core is gone: quit without the end screens, which wait for a key
 static void G_MiSTerCoreGone(void)
 {
@@ -331,8 +365,19 @@ void app_exit(int returnCode)
     Bexit(EXIT_SUCCESS);
 }
 
+#ifdef MISTER_PGO_GEN
+extern "C" void __gcov_dump(void);
+#endif
 void G_GameExit(const char *msg)
 {
+#ifdef MISTER_PGO_GEN
+    // profile-guided build, training run: write the counts before the shutdown
+    __gcov_dump();
+    LOG_F(INFO, "mister: PGO counts written");
+#endif
+#ifdef MISTER_HYBRID
+    MiSTer_RenderSync();
+#endif
     if (msg && *msg != 0 && g_player[myconnectindex].ps != NULL)
         g_player[myconnectindex].ps->palette = BASEPAL;
 
@@ -614,6 +659,29 @@ static void G_SE40(int32_t smoothratio)
 }
 #endif
 
+#ifdef MISTER_HYBRID
+// The mirror's script events, from the renderer's thread: run by the game's thread
+struct MirrorEvent { int event, spriteNum, playerNum, ret; };
+
+static void G_MirrorEventOnGameThread(void *p)
+{
+    auto const e = (MirrorEvent *)p;
+    e->ret = VM_OnEventWithReturn(e->event, e->spriteNum, e->playerNum, e->ret);
+}
+
+static int G_MirrorEvent(int event, int spriteNum, int playerNum, int ret)
+{
+    MirrorEvent e = { event, spriteNum, playerNum, ret };
+    if (MiSTer_OnRenderThread())
+        MiSTer_RenderCall(G_MirrorEventOnGameThread, &e);
+    else
+        G_MirrorEventOnGameThread(&e);
+    return e.ret;
+}
+#else
+# define G_MirrorEvent(event, spriteNum, playerNum, ret) VM_OnEventWithReturn(event, spriteNum, playerNum, ret)
+#endif
+
 void G_HandleMirror(int32_t x, int32_t y, int32_t z, fix16_t a, fix16_t q16horiz, int32_t smoothratio)
 {
     MICROPROFILE_SCOPEI("Game", EDUKE32_FUNCTION, MP_YELLOWGREEN);
@@ -632,7 +700,7 @@ void G_HandleMirror(int32_t x, int32_t y, int32_t z, fix16_t a, fix16_t q16horiz
 
             //give scripts the chance to reset gotpics for effects that run in EVENT_DISPLAYROOMS
             //EVENT_RESETGOTPICS must be called after the last call to EVENT_DISPLAYROOMS in a frame, but before any engine-side renderDrawRoomsQ16
-            VM_OnEvent(EVENT_RESETGOTPICS, -1, -1);
+            G_MirrorEvent(EVENT_RESETGOTPICS, -1, -1, 0);
             return;
         }
 
@@ -691,7 +759,7 @@ void G_HandleMirror(int32_t x, int32_t y, int32_t z, fix16_t a, fix16_t q16horiz
             CAMERA(q16horiz) = q16horiz;
 
             display_mirror = 1;
-            VM_OnEventWithReturn(EVENT_DISPLAYROOMS, g_player[0].ps->i, 0, 0);
+            G_MirrorEvent(EVENT_DISPLAYROOMS, g_player[0].ps->i, 0, 0);
             display_mirror = 0;
 
             //reset the camera position
@@ -701,7 +769,7 @@ void G_HandleMirror(int32_t x, int32_t y, int32_t z, fix16_t a, fix16_t q16horiz
 
             //give scripts the chance to reset gotpics for effects that run in EVENT_DISPLAYROOMS
             //EVENT_RESETGOTPICS must be called after the last call to EVENT_DISPLAYROOMS in a frame, but before any engine-side renderDrawRoomsQ16
-            VM_OnEvent(EVENT_RESETGOTPICS, -1, -1);
+            G_MirrorEvent(EVENT_RESETGOTPICS, -1, -1, 0);
 
             //prepare to render the mirror
             renderPrepareMirror(x, y, z, a, q16horiz, g_mirrorWall[i], &tposx, &tposy, &tang);
@@ -785,6 +853,114 @@ static void G_ReadGLFrame(void)
 }
 #endif
 
+#ifdef MISTER_HYBRID
+// The view drawn on the other CPU (mister_port.cpp): G_DrawRooms() of the
+// game's frame (misterDrawRoomsThreadable: drawframe_do()) hands the view over
+// once the camera is set and returns; G_MiSTerViewFinish() waits for it and
+// does the rest of G_DrawRooms(), before the HUD is drawn over it.
+static int misterDrawRoomsThreadable;
+static struct { int pending, playerNum, viewingRange; } misterView;
+
+int G_MiSTerViewPending(void)
+{
+    return misterView.pending;
+}
+#endif
+
+// The rest of G_DrawRooms() once the view is drawn
+static void G_DrawRoomsEpilogue(int32_t playerNum, int32_t viewingRange)
+{
+    auto const pPlayer = g_player[playerNum].ps;
+
+    {
+        // Totalclock count of last step of p->visibility converging towards
+        // ud.const_visibility.
+        static int32_t lastvist;
+        const int32_t visdif = ud.const_visibility-pPlayer->visibility;
+
+        // Check if totalclock was cleared (e.g. restarted game).
+        if (totalclock < lastvist)
+            lastvist = 0;
+
+        // Every 2nd totalclock increment (each 1/60th second), ...
+        while (totalclock >= lastvist+2)
+        {
+            // ... approximately three-quarter the difference between
+            // p->visibility and ud.const_visibility.
+            const int32_t visinc = visdif>>2;
+
+            if (klabs(visinc) == 0)
+            {
+                pPlayer->visibility = ud.const_visibility;
+                break;
+            }
+
+            pPlayer->visibility += visinc;
+            lastvist = (int32_t) totalclock;
+        }
+    }
+
+    if (r_usenewaspect)
+    {
+        newaspect_enable = 0;
+        renderSetAspect(viewingRange, tabledivide32_noinline(65536 * ydim * 8, xdim * 5));
+    }
+
+    VM_OnEvent(EVENT_DISPLAYROOMSEND, g_player[screenpeek].ps->i, screenpeek);
+}
+
+#ifdef MISTER_HYBRID
+void G_MiSTerViewFinish(void)
+{
+    if (!misterView.pending)
+        return;
+    MiSTer_RenderWait();
+    misterView.pending = 0;
+    G_DrawRoomsEpilogue(misterView.playerNum, misterView.viewingRange);
+}
+#endif
+
+// The 3D view with the camera as set (ud.camera*): mirrors, TROR, walls and
+// floors, the sprites. The part of G_DrawRooms() the renderer's thread draws.
+void G_DrawRoomsView(int32_t smoothRatio)
+{
+    MISTER_TRACE(renderPhase, 11);
+    G_HandleMirror(CAMERA(pos.x), CAMERA(pos.y), CAMERA(pos.z), CAMERA(q16ang), CAMERA(q16horiz), smoothRatio);
+    G_ClearGotMirror();
+    MISTER_TRACE(renderPhase, 12);
+#ifdef LEGACY_ROR
+    G_SE40(smoothRatio);
+#endif
+#ifdef POLYMER
+    if (videoGetRenderMode() == REND_POLYMER)
+        polymer_setanimatesprites(G_DoSpriteAnimations, CAMERA(pos.x),CAMERA(pos.y),CAMERA(pos.z),fix16_to_int(CAMERA(q16ang)),smoothRatio);
+#endif
+    // for G_PrintCoords
+    dr_viewingrange = viewingrange;
+    dr_yxaspect = yxaspect;
+#ifdef DEBUG_MIRRORS_ONLY
+    bitmap_set(gotpic, MIRROR);
+#else
+    yax_preparedrawrooms();
+    MISTER_TRACE(renderPhase, 13);
+    renderDrawRoomsQ16(CAMERA(pos.x),CAMERA(pos.y),CAMERA(pos.z),CAMERA(q16ang),CAMERA(q16horiz),CAMERA(sect));
+    MISTER_TRACE(renderPhase, 14);
+    yax_drawrooms(G_DoSpriteAnimations, CAMERA(sect), 0, smoothRatio);
+    MISTER_TRACE(renderPhase, 15);
+#ifdef LEGACY_ROR
+    if ((unsigned)ror_sprite < MAXSPRITES && drawing_ror == 1)  // viewing from bottom
+        G_OROR_DupeSprites(&sprite[ror_sprite]);
+#endif
+    G_DoSpriteAnimations(CAMERA(pos.x),CAMERA(pos.y),CAMERA(pos.z),fix16_to_int(CAMERA(q16ang)),smoothRatio);
+    MISTER_TRACE(renderPhase, 16);
+#ifdef LEGACY_ROR
+    drawing_ror = 0;
+#endif
+    renderDrawMasks();
+    MISTER_TRACE(renderPhase, 17);
+#endif
+}
+
 void G_DrawRooms(int32_t playerNum, int32_t smoothRatio)
 {
     MICROPROFILE_SCOPEI("Game", EDUKE32_FUNCTION, MP_YELLOWGREEN);
@@ -798,6 +974,17 @@ void G_DrawRooms(int32_t playerNum, int32_t smoothRatio)
     int const viewingRange = viewingrange;
 
     if (g_networkMode == NET_DEDICATED_SERVER) return;
+
+#ifdef MISTER_HYBRID
+    // A view still being drawn on the other CPU is finished first. This one
+    // is drawn there while the game moves on (mister_port.cpp) when it is the
+    // game's own frame (drawframe_do()) and nothing needs the view at once:
+    // the screenshot of a saved game, the camera view, the tilted screen.
+    G_MiSTerViewFinish();
+    bool const misterThreaded = misterDrawRoomsThreadable && !g_screenCapture && ud.camerasprite < 0
+                                && videoGetRenderMode() == REND_CLASSIC && !(ud.screen_tilting && pPlayer->rotscrnang)
+                                && MiSTer_RenderThreaded();
+#endif
 
     totalclocklock = totalclock;
     rotatespritesmoothratio = smoothRatio;
@@ -834,10 +1021,20 @@ void G_DrawRooms(int32_t playerNum, int32_t smoothRatio)
 
     CAMERA(sect) = pPlayer->cursectnum;
 
+#ifdef MISTER_HYBRID
+    // Drawn on the other CPU: the moving sectors as they are now. The game
+    // moves on meanwhile and must not find them put back in time.
+    if (!misterThreaded)
+#endif
     G_DoInterpolations(smoothRatio);
     G_AnimateCamSprite(smoothRatio);
-    G_DoConveyorInterp(smoothRatio);
-    G_InterpolateLights(smoothRatio);
+#ifdef MISTER_HYBRID
+    if (!misterThreaded)
+#endif
+    {
+        G_DoConveyorInterp(smoothRatio);
+        G_InterpolateLights(smoothRatio);
+    }
 
     if (g_screenCapture)
     {
@@ -1139,34 +1336,18 @@ void G_DrawRooms(int32_t playerNum, int32_t smoothRatio)
                 LOG_F(ERROR, "EVENT_DISPLAYROOMS return value must be 0 or 1, all other values are reserved.");
 #endif
 
-            G_HandleMirror(CAMERA(pos.x), CAMERA(pos.y), CAMERA(pos.z), CAMERA(q16ang), CAMERA(q16horiz), smoothRatio);
-            G_ClearGotMirror();
-#ifdef LEGACY_ROR
-            G_SE40(smoothRatio);
+#ifdef MISTER_HYBRID
+            if (misterThreaded)
+            {
+                // drawn on the other CPU: G_MiSTerViewFinish() does the rest
+                misterView.pending      = 1;
+                misterView.playerNum    = playerNum;
+                misterView.viewingRange = viewingRange;
+                MiSTer_RenderKick(smoothRatio);
+                return;
+            }
 #endif
-#ifdef POLYMER
-            if (videoGetRenderMode() == REND_POLYMER)
-                polymer_setanimatesprites(G_DoSpriteAnimations, CAMERA(pos.x),CAMERA(pos.y),CAMERA(pos.z),fix16_to_int(CAMERA(q16ang)),smoothRatio);
-#endif
-            // for G_PrintCoords
-            dr_viewingrange = viewingrange;
-            dr_yxaspect = yxaspect;
-#ifdef DEBUG_MIRRORS_ONLY
-            bitmap_set(gotpic, MIRROR);
-#else
-            yax_preparedrawrooms();
-            renderDrawRoomsQ16(CAMERA(pos.x),CAMERA(pos.y),CAMERA(pos.z),CAMERA(q16ang),CAMERA(q16horiz),CAMERA(sect));
-            yax_drawrooms(G_DoSpriteAnimations, CAMERA(sect), 0, smoothRatio);
-#ifdef LEGACY_ROR
-            if ((unsigned)ror_sprite < MAXSPRITES && drawing_ror == 1)  // viewing from bottom
-                G_OROR_DupeSprites(&sprite[ror_sprite]);
-#endif
-            G_DoSpriteAnimations(CAMERA(pos.x),CAMERA(pos.y),CAMERA(pos.z),fix16_to_int(CAMERA(q16ang)),smoothRatio);
-#ifdef LEGACY_ROR
-            drawing_ror = 0;
-#endif
-            renderDrawMasks();
-#endif
+            G_DrawRoomsView(smoothRatio);
         }
 
         if (g_screenCapture)
@@ -1237,44 +1418,14 @@ void G_DrawRooms(int32_t playerNum, int32_t smoothRatio)
         }
     }
 
-    G_RestoreInterpolations();
-    G_ResetConveyorInterp();
-
+#ifdef MISTER_HYBRID
+    if (!misterThreaded)  // nothing was put back in time
+#endif
     {
-        // Totalclock count of last step of p->visibility converging towards
-        // ud.const_visibility.
-        static int32_t lastvist;
-        const int32_t visdif = ud.const_visibility-pPlayer->visibility;
-
-        // Check if totalclock was cleared (e.g. restarted game).
-        if (totalclock < lastvist)
-            lastvist = 0;
-
-        // Every 2nd totalclock increment (each 1/60th second), ...
-        while (totalclock >= lastvist+2)
-        {
-            // ... approximately three-quarter the difference between
-            // p->visibility and ud.const_visibility.
-            const int32_t visinc = visdif>>2;
-
-            if (klabs(visinc) == 0)
-            {
-                pPlayer->visibility = ud.const_visibility;
-                break;
-            }
-
-            pPlayer->visibility += visinc;
-            lastvist = (int32_t) totalclock;
-        }
+        G_RestoreInterpolations();
+        G_ResetConveyorInterp();
     }
-
-    if (r_usenewaspect)
-    {
-        newaspect_enable = 0;
-        renderSetAspect(viewingRange, tabledivide32_noinline(65536 * ydim * 8, xdim * 5));
-    }
-
-    VM_OnEvent(EVENT_DISPLAYROOMSEND, g_player[screenpeek].ps->i, screenpeek);
+    G_DrawRoomsEpilogue(playerNum, viewingRange);
 }
 
 void G_DumpDebugInfo(void)
@@ -3728,6 +3879,15 @@ static inline void G_DoEventAnimSprites(int tspriteNum)
 void G_DoSpriteAnimations(int32_t ourx, int32_t oury, int32_t ourz, int32_t oura, int32_t smoothratio)
 {
     MICROPROFILE_SCOPEI("Game", EDUKE32_FUNCTION, MP_YELLOWGREEN);
+#ifdef MISTER_HYBRID
+    // Asked by the renderer on the other CPU: done by the game's thread,
+    // which runs the scripts (EVENT_ANIMATESPRITES) and alone may
+    if (MiSTer_OnRenderThread())
+    {
+        MiSTer_RenderAnimateSprites(ourx, oury, ourz, oura, smoothratio);
+        return;
+    }
+#endif
 #ifdef MISTER_PROFILE
     MISTER_PROF_SCOPE(MPROF_SPRITEANIM);
 #endif
@@ -6499,6 +6659,26 @@ void drawframe_do(void)
 
     g_lastFrameStartTime = timerGetNanoTicks();
 
+#ifdef MISTER_HYBRID
+    MiSTer_UpdateConScreen();
+    // The view the other CPU drew since the last frame: finished, the HUD
+    // over it, shown. This frame's view is then started there (G_DrawRooms())
+    // and is shown with the next frame.
+    if (G_MiSTerViewPending())
+    {
+        G_MiSTerViewFinish();
+        MISTER_TRACE(mainPhase, 6);
+        G_DisplayRest(calc_smoothratio(totalclock, ototalclock));
+        MISTER_TRACE(mainPhase, 7);
+        g_frameJustDrawn = true;
+        g_lastFrameEndTime = timerGetNanoTicks();
+        g_lastFrameDuration = g_lastFrameEndTime - g_lastFrameStartTime;
+        g_frameCounter++;
+        videoNextPage();
+        S_Update();
+    }
+#endif
+
     if (!g_saveRequested)
     {
         // only allow binds to function if the player is actually in a game (not in a menu, typing, et cetera) or demo
@@ -6517,7 +6697,20 @@ void drawframe_do(void)
 
     int const smoothratio = calc_smoothratio(totalclock, ototalclock);
 
+#ifdef MISTER_HYBRID
+    misterDrawRoomsThreadable = (g_player[myconnectindex].ps->gm & MODE_GAME) && !g_saveRequested;
+#endif
     G_DrawRooms(screenpeek, smoothratio);
+#ifdef MISTER_HYBRID
+    misterDrawRoomsThreadable = 0;
+    if (G_MiSTerViewPending())
+    {
+        // being drawn on the other CPU: shown with the next frame
+        g_lastFrameEndTime2 = timerGetNanoTicks();
+        g_lastFrameDuration2 = g_lastFrameEndTime2 - g_lastFrameStartTime;
+        return;
+    }
+#endif
 
     if (videoGetRenderMode() >= REND_POLYMOST)
         G_DrawBackground();
@@ -6784,6 +6977,10 @@ int app_main(int argc, char const* const* argv)
 
     if (!g_useCwd)
         G_CleanupSearchPaths();
+
+#ifdef MISTER_HYBRID
+    MiSTer_VfsBench();
+#endif
 
 #ifndef EDUKE32_STANDALONE
     G_SetupCheats();
@@ -7157,6 +7354,11 @@ MAIN_LOOP_RESTART:
         double gameUpdateStartTime = timerGetFractionalTicks();
         auto framecnt = g_frameCounter;
 
+#ifdef MISTER_HYBRID
+        int misterTics = 0;
+        MISTER_TRACE(mainFrame, misterTrace->mainFrame + 1);
+        MISTER_TRACE(mainPhase, 1);
+#endif
         if (((g_netClient || g_netServer) || (myplayer.gm & (MODE_MENU|MODE_DEMO)) == 0) && (int32_t)(totalclock - ototalclock) >= TICSPERFRAME)
         {
             do
@@ -7170,6 +7372,9 @@ MAIN_LOOP_RESTART:
                         break;
 
                     ototalclock += TICSPERFRAME;
+#ifdef MISTER_HYBRID
+                    misterTics++;
+#endif
 
                     if (((ud.show_help == 0 && (myplayer.gm & MODE_MENU) != MODE_MENU) || ud.recstat == 2 || (g_netServer || ud.multimode > 1))
                         && (myplayer.gm & MODE_GAME))
@@ -7180,7 +7385,17 @@ MAIN_LOOP_RESTART:
                     }
 
                 }
-                while (((g_netClient || g_netServer) || (myplayer.gm & (MODE_MENU | MODE_DEMO)) == 0) && (int32_t)(totalclock - ototalclock) >= TICSPERFRAME && !g_saveRequested);
+                while (((g_netClient || g_netServer) || (myplayer.gm & (MODE_MENU | MODE_DEMO)) == 0) && (int32_t)(totalclock - ototalclock) >= TICSPERFRAME && !g_saveRequested
+#ifdef MISTER_HYBRID
+                       && misterMoreTics(misterTics)
+#endif
+                       );
+
+#ifdef MISTER_HYBRID
+                // the ticks still owed are dropped: slower than real time, but a frame now
+                if (misterMaxTics() && !g_netClient && !g_netServer && (int32_t)(totalclock - ototalclock) >= TICSPERFRAME)
+                    ototalclock += ((int32_t)(totalclock - ototalclock) / TICSPERFRAME) * TICSPERFRAME;
+#endif
 
                 g_gameUpdateTime = timerGetFractionalTicks() - gameUpdateStartTime;
 

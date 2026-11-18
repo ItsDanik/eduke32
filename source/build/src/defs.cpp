@@ -146,6 +146,37 @@ static const char *skyfaces[6] =
 
 static int32_t defsparser(scriptfile *script);
 
+#ifdef MISTER_HYBRID
+// Voxels off in settings.cfg (r_voxels "0", the menu's Voxels: Off): the voxel
+// models are not loaded. Ion Fury defines 260; reading them and matching
+// their colors takes ~16 s on the MiSTer, for models nothing draws.
+static int misterVoxelsOff(void)
+{
+    static int off = -1;
+    if (off >= 0)
+        return off;
+    off = 0;
+    buildvfs_FILE fp = buildvfs_fopen_read("settings.cfg");
+    if (fp)
+    {
+        char line[256];
+        while (buildvfs_fgets(line, sizeof(line), fp))
+        {
+            if (Bstrncmp(line, "r_voxels", 8))
+                continue;
+            char const *p = line + 8;
+            while (*p == ' ' || *p == '\t' || *p == '"')
+                p++;
+            off = (*p == '0');
+        }
+        buildvfs_fclose(fp);
+    }
+    if (off)
+        LOG_F(INFO, "mister: voxels are off in settings.cfg: the voxel models are not loaded");
+    return off;
+}
+#endif
+
 static void defsparser_include(const char *fn, const scriptfile *script, const char *cmdtokptr)
 {
     scriptfile *included;
@@ -1970,6 +2001,13 @@ static int32_t defsparser(scriptfile *script)
                 break;
             }
 
+#ifdef MISTER_HYBRID
+            if (misterVoxelsOff())
+            {
+                script->textptr = voxelend + 1;
+                break;
+            }
+#endif
             if (EDUKE32_PREDICT_FALSE(qloadkvx(nextvoxid, fn)))
             {
                 LOG_F(ERROR, "voxel: failed loading %s",fn);

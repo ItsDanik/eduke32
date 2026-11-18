@@ -460,6 +460,9 @@ static void sv_viewscreen_cleanup()
 // XXX: keyboard input 'blocked' after load fail? (at least ESC?)
 int32_t G_LoadPlayer(savebrief_t & sv)
 {
+#ifdef MISTER_HYBRID
+    MiSTer_RenderSync();
+#endif
     if (sv.isExt)
     {
         int volume = -1;
@@ -853,6 +856,9 @@ uint16_t G_CountOldSaves(void)
 
 int32_t G_SavePlayer(savebrief_t & sv, bool isAutoSave)
 {
+#ifdef MISTER_HYBRID
+    MiSTer_RenderSync();
+#endif
 #ifdef __ANDROID__
     G_SavePalette();
 #endif

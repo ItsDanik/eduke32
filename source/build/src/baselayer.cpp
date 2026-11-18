@@ -196,7 +196,9 @@ bool g_useLogCallback = true;
 
 void engineLogCallback(void *user_data, const loguru::Message &message)
 {
-    if (!g_useLogCallback)
+    // MiSTer: nothing to write to once the console is freed (OSD_Cleanup()
+    // comes before uninitgroupfile() in G_Shutdown(), and that logs a line)
+    if (!g_useLogCallback || osd == nullptr)
         return;
 
     if (startwin_isopen())
