@@ -23,6 +23,7 @@ grpfile_t const *MiSTer_SelectGroup(void);
 // add-ons' are each in a folder of their own, so that no game lists, or
 // loads, another's (savegame.cpp)
 char const *MiSTer_SaveDir(void);
+void MiSTer_VfsBench(void);
 
 // A level's map is loaded, its sprites not yet set up: mends what is wrong in
 // the map itself (premap.cpp)
@@ -57,11 +58,82 @@ int MiSTer_LimitLook(void);
 // picked from, or after the core was loaded again
 int MiSTer_ExitCode(void);
 
+// The 3D view drawn on the second CPU while the game moves on to the next
+// frame (mister_port.cpp, "The renderer's thread"). 1 when it is on
+// (MISTER_HYBRID_RENDERTHREAD=0 turns it off) and the core is there.
+int MiSTer_RenderThreaded(void);
+// Draw the view (G_DrawRoomsView()) with the camera as it is set (ud.camera*)
+void MiSTer_RenderKick(int32_t smoothRatio);
+// Until it is drawn; the sprite animations it asks for meanwhile are run
+void MiSTer_RenderWait(void);
+// Often, in the game's loops: the sprite animation the renderer may wait for
+void MiSTer_RenderPoll(void);
+// Before the world changes under the renderer (a level, a saved game, the
+// video mode, the exit): the view in flight is finished (G_MiSTerViewFinish())
+void MiSTer_RenderSync(void);
+// 1 on the renderer's thread
+int MiSTer_OnRenderThread(void);
+// 1 while a view is being drawn there
+int MiSTer_RenderBusy(void);
+// From the renderer's thread: fn(arg) run by the game's thread, which alone
+// may run the scripts; the renderer waits for it
+void MiSTer_RenderCall(void (*fn)(void *), void *arg);
+// G_DoSpriteAnimations() that way
+void MiSTer_RenderAnimateSprites(int32_t x, int32_t y, int32_t z, int32_t a, int32_t smoothratio);
+// game.cpp: the 3D view of G_DrawRooms() once the camera is set; whether one
+// is being drawn on the other CPU, and finishing it (the rest of G_DrawRooms())
+void G_DrawRoomsView(int32_t smoothRatio);
+int G_MiSTerViewPending(void);
+void G_MiSTerViewFinish(void);
+#define MISTER_RENDER_POLL() MiSTer_RenderPoll()
+
+// Debugging: what each thread was doing, in /tmp/fury_trace.bin, which
+// survives the game's death (od -An -tu4 /tmp/fury_trace.bin)
+struct MiSTerTrace
+{
+    uint32_t mainFrame, mainPhase, mainWorldPhase, mainActor, mainRpcDepth;
+    uint32_t renderFrame, renderPhase, renderYaxLevel;
+    int32_t  rpcArgs[5];
+    uint32_t renderPending, renderBusy, renderWanted;
+};
+extern MiSTerTrace *misterTrace;
+#define MISTER_TRACE(field, value) do { if (misterTrace) misterTrace->field = (value); } while (0)
+
+// The screen as the scripts see it (gamevars.cpp: xdim, windowx1, windowx2):
+// 320 wide in the 640-wide modes, which the core shows 4:3 like the others,
+// so that scripts laying the HUD out for the aspect ratio do it for 4:3.
+// The pixel x coordinates they pass to the drawing commands are scaled back.
+extern int32_t misterConXdim, misterConWindowX1, misterConWindowX2, misterConXScale;
+extern int32_t misterConYdim, misterConWindowY1, misterConWindowY2;
+void MiSTer_UpdateConScreen(void);
+#define MISTER_CON_XDIM misterConXdim
+#define MISTER_CON_YDIM misterConYdim
+#define MISTER_CON_WINDOWX1 misterConWindowX1
+#define MISTER_CON_WINDOWX2 misterConWindowX2
+#define MISTER_CON_WINDOWY1 misterConWindowY1
+#define MISTER_CON_WINDOWY2 misterConWindowY2
+#define MISTER_CON_X1(x) ((x) * misterConXScale)
+#define MISTER_CON_X2(x) (((x) + 1) * misterConXScale - 1)
+#define MISTER_CON_Y1(y) ((y) * ydim / misterConYdim)
+#define MISTER_CON_Y2(y) (((y) + 1) * ydim / misterConYdim - 1)
+
 // The 2D art drawn in `stmt` (the HUD) moved down the screen by `lines`
 #define MISTER_HUD(lines, stmt) do { rotatesprite_mister_yofs = (lines); stmt; rotatesprite_mister_yofs = 0; } while (0)
 
 #else
 
 #define MISTER_HUD(lines, stmt) do { stmt; } while (0)
+#define MISTER_RENDER_POLL() ((void)0)
+#define MISTER_CON_XDIM xdim
+#define MISTER_CON_YDIM ydim
+#define MISTER_CON_WINDOWX1 windowxy1.x
+#define MISTER_CON_WINDOWX2 windowxy2.x
+#define MISTER_CON_WINDOWY1 windowxy1.y
+#define MISTER_CON_WINDOWY2 windowxy2.y
+#define MISTER_CON_X1(x) (x)
+#define MISTER_CON_X2(x) (x)
+#define MISTER_CON_Y1(y) (y)
+#define MISTER_CON_Y2(y) (y)
+#define MISTER_TRACE(field, value) ((void)0)
 
 #endif

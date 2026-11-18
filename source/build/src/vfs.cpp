@@ -15,6 +15,18 @@
 #include "vfs.h"
 #include "cache1d.h"
 
+#ifdef MISTER_HYBRID
+// Two threads read files (mister.h): the tables of open files, the group
+// files' positions and kplib's one open zip entry are shared
+# include <pthread.h>
+# include "mister.h"
+static pthread_mutex_t misterIoMutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+void misterIoLock(void) { pthread_mutex_lock(&misterIoMutex); }
+void misterIoUnlock(void) { pthread_mutex_unlock(&misterIoMutex); }
+#else
+# define MISTER_IO_GUARD ((void)0)
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -97,6 +109,9 @@ int32_t numgroupfiles;
 
 void uninitgroupfile(void)
 {
+#ifdef MISTER_HYBRID
+    vfs_pathcache_report();
+#endif
     PHYSFS_deinit();
 }
 
@@ -146,6 +161,9 @@ char *listsearchpath(int32_t initp)
 
 int32_t addsearchpath_user(const char *p, int32_t user)
 {
+#ifdef MISTER_HYBRID
+    vfs_pathcache_flush();
+#endif
     struct Bstat st;
     char *s;
     searchpath_t *srch;
@@ -195,6 +213,9 @@ int32_t addsearchpath_user(const char *p, int32_t user)
 
 int32_t removesearchpath(const char *p)
 {
+#ifdef MISTER_HYBRID
+    vfs_pathcache_flush();
+#endif
     searchpath_t *srch;
     char *s;
     char *path = (char *)Xmalloc(Bstrlen(p) + 2);
@@ -246,6 +267,9 @@ int32_t removesearchpath(const char *p)
 
 void removesearchpaths_withuser(int32_t usermask)
 {
+#ifdef MISTER_HYBRID
+    vfs_pathcache_flush();
+#endif
     searchpath_t *next;
 
     for (searchpath_t *srch = searchpathhead; srch; srch = next)
@@ -277,7 +301,67 @@ void removesearchpaths_withuser(int32_t usermask)
     }
 }
 
+#ifdef MISTER_HYBRID
+// The cache of these searches' answers: pathcache.h
+# include "pathcache.h"
+
+void vfs_pathcache_flush(void)
+{
+    pathcache_flush();
+}
+
+void vfs_pathcache_report(void)
+{
+    pathcache_stats_t const &st = pathcache_stats;
+
+    if (!pathcache_enabled())
+        LOG_F(INFO, "File lookup cache: off (MISTER_HYBRID_PATHCACHE=0).");
+    else if (st.lookups)
+        LOG_F(INFO, "File lookup cache: %u lookups, %u answered \"not on disk\" and %u \"found\" from the cache "
+                    "(%u%%), %u flushes.", st.lookups, st.negative, st.positive,
+                    (unsigned)((uint64_t)(st.negative + st.positive) * 100 / st.lookups), st.flushes);
+}
+
+static int32_t findfrompath_search(const char *fn, char **where);
+
 int32_t findfrompath(const char *fn, char **where)
+{
+    if (!fn || !fn[0])
+        return -1;
+    if (!pathcache_enabled())
+        return findfrompath_search(fn, where);
+
+    char *cached = NULL;
+    int const known = pathcache_get(fn, pathsearchmode, &cached);
+
+    if (known == 1)
+    {
+        pathcache_stats.negative++;
+        return -1;
+    }
+    if (known == 2)
+    {
+        // still there? One stat() in place of the whole search
+        if (buildvfs_exists(cached))
+        {
+            pathcache_stats.positive++;
+            *where = Xstrdup(cached);
+            free(cached);
+            return 0;
+        }
+        free(cached);
+        pathcache_drop(fn, pathsearchmode);
+    }
+
+    int32_t const result = findfrompath_search(fn, where);
+    pathcache_put(fn, pathsearchmode, result < 0 ? NULL : *where);
+    return result;
+}
+
+static int32_t findfrompath_search(const char *fn, char **where)
+#else
+int32_t findfrompath(const char *fn, char **where)
+#endif
 {
     // pathsearchmode == 0: tests current dir and then the dirs of the path stack
     // pathsearchmode == 1: tests fn without modification, then like for pathsearchmode == 0
@@ -658,6 +742,9 @@ int initgroupfile(const char *filename)
 
 void uninitgroupfile(void)
 {
+#ifdef MISTER_HYBRID
+    vfs_pathcache_report();
+#endif
     int32_t i;
 
     for (i=numgroupfiles-1; i>=0; i--)
@@ -844,6 +931,7 @@ char const * kfileparent(int32_t const handle)
 
 buildvfs_kfd kopen4load(const char *filename, char searchfirst)
 {
+    MISTER_IO_GUARD;
     int32_t newhandle = MAXOPENFILES-1;
 
     if (filename==NULL)
@@ -1034,22 +1122,27 @@ void kclose_internal(int32_t handle, const uint8_t *arraygrp, intptr_t *arrayhan
 
 int32_t kread(int32_t handle, void *buffer, int32_t leng)
 {
+    MISTER_IO_GUARD;
     return kread_internal(handle, buffer, leng, filegrp, filehan, filepos);
 }
 int32_t klseek(int32_t handle, int32_t offset, int32_t whence)
 {
+    MISTER_IO_GUARD;
     return klseek_internal(handle, offset, whence, filegrp, filehan, filepos);
 }
 int32_t kfilelength(int32_t handle)
 {
+    MISTER_IO_GUARD;
     return kfilelength_internal(handle, filegrp, filehan, filepos);
 }
 int32_t ktell(int32_t handle)
 {
+    MISTER_IO_GUARD;
     return ktell_internal(handle, filegrp, filehan, filepos);
 }
 void kclose(int32_t handle)
 {
+    MISTER_IO_GUARD;
     return kclose_internal(handle, filegrp, filehan);
 }
 

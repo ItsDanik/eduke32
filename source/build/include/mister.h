@@ -88,7 +88,7 @@ uint32_t misterField(void);
 // (sdlayer.cpp). MISTER_PROF_SCOPE(part) times the rest of the block; its
 // lines are in #ifdef MISTER_PROFILE.
 #ifdef MISTER_PROFILE
-enum { MPROF_TICS, MPROF_DRAWROOMS, MPROF_ROOMS, MPROF_MASKS, MPROF_SPRITEANIM, MPROF_HUD, MPROF_COPY, MPROF_PRESENT, MPROF_NUM };
+enum { MPROF_TICS, MPROF_DRAWROOMS, MPROF_ROOMS, MPROF_MASKS, MPROF_SPRITEANIM, MPROF_HUD, MPROF_COPY, MPROF_PRESENT, MPROF_RWAIT, MPROF_RTHREAD, MPROF_NUM };
 void misterProfAdd(int part, uint64_t ns);
 uint64_t misterProfNow(void);
 struct MisterProfScope
@@ -99,6 +99,18 @@ struct MisterProfScope
 };
 #define MISTER_PROF_SCOPE(part) MisterProfScope misterProfScope_##part(part)
 #endif
+
+// The game's thread and the renderer's (duke3d/src/mister_port.cpp) both read
+// files (tiles, sounds) and take blocks of the cache: one at a time (vfs.cpp,
+// cache1d.cpp). The thread that holds it may take it again.
+void misterIoLock(void);
+void misterIoUnlock(void);
+struct MisterIoGuard
+{
+    MisterIoGuard() { misterIoLock(); }
+    ~MisterIoGuard() { misterIoUnlock(); }
+};
+#define MISTER_IO_GUARD MisterIoGuard misterIoGuard_
 
 // The game's clock is the core's field counter (timer.cpp): 6.25MHz /
 // (400 * 262) = 59.64 fields per second.

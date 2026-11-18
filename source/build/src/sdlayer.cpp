@@ -109,7 +109,7 @@ static uint64_t profFrame[MPROF_NUM], profSum[MPROF_NUM], profMax[MPROF_NUM];
 static uint64_t profWorkSum, profWorkMax, profLastShown;
 static int profTics, profFrames, profMissed, profFieldsMissed;
 static uint32_t profLastField;
-static char const *const profNames[MPROF_NUM] = { "tics", "drawrooms", "rooms", "masks", "spriteanim", "hud", "copy", "present" };
+static char const *const profNames[MPROF_NUM] = { "tics", "drawrooms", "rooms", "masks", "spriteanim", "hud", "copy", "present", "rwait", "rthread" };
 
 void misterProfAdd(int part, uint64_t ns)
 {
@@ -3272,6 +3272,20 @@ int32_t handleevents(void)
         {
             auto dorumble = [](uint16_t const low, uint16_t const high, uint32_t const time)
             {
+#ifdef MISTER_HYBRID
+                // straight to the library: SDL skips a request equal to the
+                // last one and stops on its own timer, which left rumbles unheard
+                if (MH_IsOpen())
+                {
+                    int const any = MH_Rumble(low >> 8, high >> 8);
+                    static int logged = -1;
+                    if (logged < 0)
+                        logged = getenv("MISTER_HYBRID_RUMBLELOG") != NULL;
+                    if (logged)
+                        LOG_F(INFO, "mister: rumble %d/%d to the pads: %s", low >> 8, high >> 8, any ? "a pad with rumble" : "no pad with rumble");
+                    return;
+                }
+#endif
                 if (controller)
                     SDL_GameControllerRumble(controller, low, high, time);
                 else

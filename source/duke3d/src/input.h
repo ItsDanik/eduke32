@@ -105,7 +105,21 @@ static FORCE_INLINE void I_AddForceFeedback(int lo, int hi, int time)
     if (!joystick.hasRumble || !strength)
         return;
 
-    lo *= strength, hi *= strength, time = time * (strength + 1) / 2;
+    // a third of full strength at least (the pad's rumble is weak), doubled by Strong
+    if (lo || hi)
+    {
+        static int flip;
+        lo = min<int>(UINT16_MAX, (22000 + lo) * strength) ^ (flip ^= 1);
+        hi = min<int>(UINT16_MAX, (22000 + hi) * strength);
+    }
+    time = time * (strength + 1) / 2;
+    {
+        static int logged = -1;
+        if (logged < 0)
+            logged = getenv("MISTER_HYBRID_RUMBLELOG") != NULL;
+        if (logged)
+            LOG_F(INFO, "mister: rumble lo %d hi %d for %d ms (strength %d)", lo, hi, time, strength);
+    }
 #else
     if (!joystick.hasRumble || !ud.config.controllerRumble)
         return;

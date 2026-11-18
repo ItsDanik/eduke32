@@ -172,6 +172,13 @@ void Gv_DumpValues(void);
 void Gv_InitWeaponPointers(void);
 void Gv_RefreshPointers(void);
 void Gv_ResetVars(void);
+
+// Per-actor variable copies held in a map state (mapstate_t::vars) are stored
+// LZ4-packed: an int32 packed length (0 = raw copy follows), then the block.
+// Ion Fury keeps a snapshot per visited level with ~480 such copies of 64 KB,
+// nearly all zeros: 30+ MB raw a level, ~0.5 MB packed. (MiSTer, 2026-11-17)
+intptr_t *Gv_PackActorVars(intptr_t *packed, intptr_t const *values);
+void Gv_UnpackActorVars(intptr_t *values, intptr_t const *packed);
 int Gv_ReadSave(buildvfs_kfd kFile);
 void Gv_WriteSave(buildvfs_FILE fil);
 void Gv_Clear(void);

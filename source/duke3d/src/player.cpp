@@ -1712,6 +1712,17 @@ int A_ShootWithZvel(int const spriteNum, int const projecTile, int const forceZv
         shootAng = fix16_to_int(pPlayer->q16ang);
 
         pPlayer->crack_time = PCRACKTIME;
+
+#ifdef MISTER_HYBRID
+        // Ion Fury shoots from its scripts, past P_DoWeaponRumble(): the recoil here
+        if (FURY && playerNum == myconnectindex)
+        {
+            int const base = A_CheckSpriteTileFlags(projecTile, SFLAG_PROJECTILE) ? Proj_GetProjectile(projecTile)->extra
+                                                                                   : G_DefaultActorHealthForTile(projecTile);
+            int const dmg = clamp(base, FF_WEAPON_DMG_MIN, FF_WEAPON_DMG_MAX);
+            I_AddForceFeedback(dmg << FF_WEAPON_DMG_SCALE, dmg << FF_WEAPON_DMG_SCALE, max<int>(FF_WEAPON_MAX_TIME, dmg << FF_WEAPON_TIME_SCALE));
+        }
+#endif
     }
     else
     {
@@ -5189,6 +5200,15 @@ void P_ProcessInput(int playerNum)
         pPlayer->inv_amount[GET_SHIELD] = 0;
     }
 
+#ifdef MISTER_HYBRID
+    // Ion Fury takes the damage in its scripts (EVENT_INCURDAMAGE returns -1,
+    // past the rumble in P_IncurDamage()): rumble for the health lost this tick
+    if (FURY && playerNum == myconnectindex && pSprite->extra > 0 && pSprite->extra < pPlayer->last_extra)
+    {
+        int const dmg = pPlayer->last_extra - pSprite->extra;
+        I_AddForceFeedback(dmg << FF_PLAYER_DMG_SCALE, dmg << FF_PLAYER_DMG_SCALE, dmg << FF_PLAYER_TIME_SCALE);
+    }
+#endif
     pPlayer->last_extra = pSprite->extra;
     pPlayer->loogcnt    = (pPlayer->loogcnt > 0) ? pPlayer->loogcnt - 1 : 0;
 

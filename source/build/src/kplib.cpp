@@ -2386,7 +2386,14 @@ int32_t wildmatch(const char *match, const char *wild)
 //...
 #define KZHASHINITSIZE 8192
 static char *kzhashbuf = 0;
-static int32_t kzhashead[256], kzhashpos, kzlastfnam = -1, kzhashsiz, kzdirnamhead = -1;
+#ifdef MISTER_HYBRID
+// Ion Fury's fury.grp is a ZIP of thousands of files: with 256 chains every
+// lookup compared the name with dozens of others
+# define KZHASHHEADS 4096
+#else
+# define KZHASHHEADS 256
+#endif
+static int32_t kzhashead[KZHASHHEADS], kzhashpos, kzlastfnam = -1, kzhashsiz, kzdirnamhead = -1;
 
 static int32_t kzcheckhashsiz(int32_t siz)
 {

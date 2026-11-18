@@ -571,6 +571,12 @@ void G_UpdateScreenArea(void)
 
     if ((ud.screen_size = clamp(ud.screen_size, 0, 64)) == 0)
         renderFlushPerms();
+#ifdef MISTER_HYBRID
+    // Ion Fury draws its own HUD and never wants the engine's shrunken view
+    // (a black strip at the bottom at 200 lines, nothing in it)
+    if (FURY && ud.screen_size > 4)
+        ud.screen_size = 4;
+#endif
 
     int const screenSize    = max(ud.screen_size - 8, 0);
     int const bottomStatusY = tilesiz[sbartile()].y;
@@ -603,6 +609,9 @@ void G_UpdateScreenArea(void)
     }
 
     videoSetViewableArea(v1.x, v1.y, v2.x-1, v2.y-1);
+#ifdef MISTER_HYBRID
+    MiSTer_UpdateConScreen();
+#endif
 
     G_GetCrosshairColor();
     G_SetCrosshairColor(CrosshairColors.r, CrosshairColors.g, CrosshairColors.b);
@@ -1902,6 +1911,9 @@ static void G_CheckIfStateless()
 
 int G_EnterLevel(int gameMode)
 {
+#ifdef MISTER_HYBRID
+    MiSTer_RenderSync();  // the renderer's thread reads the world being replaced
+#endif
     vote_map = vote_episode = voting = -1;
 
     ud.respawn_monsters  = ud.m_respawn_monsters;

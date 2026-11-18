@@ -1593,7 +1593,14 @@ int32_t registerosdcommands(void)
     {
         { "benchmarkmode", "benchmark mode:\n 0: off\n 1: performance test\n 2: generate reference screenshots for correctness testing", (void *) &g_BenchmarkMode, CVAR_INT|CVAR_NOSAVE, 0, 2 },
 
-        { "crosshair", "display crosshair" CVAR_BOOL_OPTSTR, (void *)&ud.crosshair, CVAR_BOOL, 0, 1 },
+        { "crosshair", "display crosshair:\n 0: off\n 1: on\n 2: crosshair only (A.W.O.L.)", (void *)&ud.crosshair, CVAR_INT, 0, 2 },
+        // MiSTer: A.W.O.L.'s options
+        { "adsmode", "A.W.O.L. aiming down sights:\n 0: toggle\n 1: hold", (void *)&ud.adsmode, CVAR_BOOL, 0, 1 },
+        { "subtitles", "A.W.O.L. subtitles" CVAR_BOOL_OPTSTR, (void *)&ud.subtitles, CVAR_BOOL, 0, 1 },
+        { "weather", "A.W.O.L. weather:\n 0: off\n 1: low\n 2: normal", (void *)&ud.weather, CVAR_INT, 0, 2 },
+        { "particles", "A.W.O.L. particle effects" CVAR_BOOL_OPTSTR, (void *)&ud.particles, CVAR_BOOL, 0, 1 },
+        { "text_speed", "A.W.O.L. text speed:\n 0: off\n 1: slow\n 2: normal\n 3: fast", (void *)&ud.text_speed, CVAR_INT, 0, 3 },
+        { "perf_mdl", "A.W.O.L. 3D models" CVAR_BOOL_OPTSTR, (void *)&ud.perf_mdl, CVAR_BOOL, 0, 1 },
 
         { "cl_autoaim", "weapon autoaim:\n 0: none\n 1: hitscan only\n 2: projectiles only\n 3: everything", (void *)&ud.config.AutoAim, CVAR_INT|CVAR_MULTI, 0, 3 },
         { "cl_autorun", "player autorun" CVAR_BOOL_OPTSTR, (void *)&ud.auto_run, CVAR_BOOL, 0, 1 },

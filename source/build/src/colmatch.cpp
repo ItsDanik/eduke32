@@ -67,17 +67,18 @@ void paletteInitClosestColorGrid(void)
         coldist[i] = FASTPALCOLDIST-i;
 }
 
-#define COLRESULTSIZ 4096
+// Direct-mapped cache of (r,g,b) -> index. A key is the 24-bit color; the
+// empty key is ~0, which no color equals.
+#define COLRESULTSIZ 16384
 
-static uint32_t colmatchresults[COLRESULTSIZ];
-static int32_t numcolmatchresults;
+static uint32_t colmatchkeys[COLRESULTSIZ];
+static uint8_t colmatchvals[COLRESULTSIZ];
 static int32_t cache_lastokcol = 255;
 static uint32_t cache_blacklist[8];
 
 void paletteFlushClosestColor(void)
 {
-    Bmemset(colmatchresults, 0, COLRESULTSIZ * sizeof(uint32_t));
-    numcolmatchresults = 0;
+    Bmemset(colmatchkeys, 0xff, sizeof(colmatchkeys));
 }
 
 // Finds a color index in [0 .. lastokcol] closest to (r, g, b).
@@ -123,40 +124,18 @@ int32_t paletteGetClosestColorWithBlacklist(int32_t const r, int32_t const g, in
     }
 
     uint32_t const col = r | (g<<8) | (b<<16);
+    uint32_t const slot = (col * 2654435761u) >> (32 - 14);  // 14 bits: COLRESULTSIZ
 
-    int mindist = -1;
-
-    int const k = (numcolmatchresults > COLRESULTSIZ) ? COLRESULTSIZ : numcolmatchresults;
-
-    if (!numcolmatchresults) goto skip;
-
-    if (col == (colmatchresults[(numcolmatchresults-1) & (COLRESULTSIZ-1)] & 0x00ffffff))
-        return colmatchresults[(numcolmatchresults-1) & (COLRESULTSIZ-1)]>>24;
-
-    int i;
-
-    for (i = 0; i <= k-4; i+=4)
+    if (colmatchkeys[slot] == col)
     {
-        if (col == (colmatchresults[i]   & 0x00ffffff)) { mindist = i; break; }
-        if (col == (colmatchresults[i+1] & 0x00ffffff)) { mindist = i+1; break; }
-        if (col == (colmatchresults[i+2] & 0x00ffffff)) { mindist = i+2; break; }
-        if (col == (colmatchresults[i+3] & 0x00ffffff)) { mindist = i+3; break; }
-    }
-
-    if (mindist == -1)
-    for (; i < k; i++)
-        if (col == (colmatchresults[i] & 0x00ffffff)) { mindist = i; break; }
-
-    if (mindist != -1)
-    {
-        uint32_t const idx = colmatchresults[mindist]>>24;
+        uint32_t const idx = colmatchvals[slot];
         if (idx <= (unsigned)lastokcol && (blacklist == nullptr || !bitmap_test(blacklist, idx)))
             return idx;
     }
 
-skip:
-    i = paletteGetClosestColorWithBlacklistNoCache(r, g, b, lastokcol, blacklist);
-    colmatchresults[numcolmatchresults++ & (COLRESULTSIZ-1)] = col | (i << 24);
+    int const i = paletteGetClosestColorWithBlacklistNoCache(r, g, b, lastokcol, blacklist);
+    colmatchkeys[slot] = col;
+    colmatchvals[slot] = i;
     return i;
 }
 

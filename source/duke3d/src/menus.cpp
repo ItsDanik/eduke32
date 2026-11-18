@@ -457,6 +457,26 @@ static MenuEntry_t ME_GAMESETUP_AIM_AUTO = MAKE_MENUENTRY( "Auto aim:", &MF_Redf
 static MenuOption_t MEO_GAMESETUP_ALWAYS_RUN = MAKE_MENUOPTION( &MF_Redfont, &MEOS_NoYes, &ud.auto_run);
 static MenuEntry_t ME_GAMESETUP_ALWAYS_RUN = MAKE_MENUENTRY( "Always run:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_GAMESETUP_ALWAYS_RUN, Option );
 
+// MiSTer: A.W.O.L.'s options (its own EDuke32 has them in Game Setup)
+static char const *MEOSN_AWOL_ADSMODE[] = { "Toggle", "Hold", };
+static MenuOptionSet_t MEOS_AWOL_ADSMODE = MAKE_MENUOPTIONSET( MEOSN_AWOL_ADSMODE, NULL, 0x3 );
+static MenuOption_t MEO_AWOL_ADSMODE = MAKE_MENUOPTION( &MF_Redfont, &MEOS_AWOL_ADSMODE, &ud.adsmode );
+static MenuEntry_t ME_AWOL_ADSMODE = MAKE_MENUENTRY( "ADS mode:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_AWOL_ADSMODE, Option );
+static char const *MEOSN_AWOL_WEATHER[] = { "Off", "Low", "Normal", };
+static MenuOptionSet_t MEOS_AWOL_WEATHER = MAKE_MENUOPTIONSET( MEOSN_AWOL_WEATHER, NULL, 0x2 );
+static MenuOption_t MEO_AWOL_WEATHER = MAKE_MENUOPTION( &MF_Redfont, &MEOS_AWOL_WEATHER, &ud.weather );
+static MenuEntry_t ME_AWOL_WEATHER = MAKE_MENUENTRY( "Weather:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_AWOL_WEATHER, Option );
+static MenuOption_t MEO_AWOL_PARTICLES = MAKE_MENUOPTION( &MF_Redfont, &MEOS_OffOn, &ud.particles );
+static MenuEntry_t ME_AWOL_PARTICLES = MAKE_MENUENTRY( "Particle effects:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_AWOL_PARTICLES, Option );
+static char const *MEOSN_AWOL_TEXTSPEED[] = { "Off", "Slow", "Normal", "Fast", };
+static MenuOptionSet_t MEOS_AWOL_TEXTSPEED = MAKE_MENUOPTIONSET( MEOSN_AWOL_TEXTSPEED, NULL, 0x3 );
+static MenuOption_t MEO_AWOL_TEXTSPEED = MAKE_MENUOPTION( &MF_Redfont, &MEOS_AWOL_TEXTSPEED, &ud.text_speed );
+static MenuEntry_t ME_AWOL_TEXTSPEED = MAKE_MENUENTRY( "Text speed:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_AWOL_TEXTSPEED, Option );
+static MenuOption_t MEO_AWOL_SUBTITLES = MAKE_MENUOPTION( &MF_Redfont, &MEOS_OffOn, &ud.subtitles );
+static MenuEntry_t ME_AWOL_SUBTITLES = MAKE_MENUENTRY( "Subtitles:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_AWOL_SUBTITLES, Option );
+static MenuOption_t MEO_AWOL_PERFMDL = MAKE_MENUOPTION( &MF_Redfont, &MEOS_OffOn, &ud.perf_mdl );
+static MenuEntry_t ME_AWOL_PERFMDL = MAKE_MENUENTRY( "3D models:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_AWOL_PERFMDL, Option );
+
 static char const *MEOSN_GAMESETUP_WEAPSWITCH_PICKUP[] = { "Never", "If new", /*"If favored",*/ };
 static MenuOptionSet_t MEOS_GAMESETUP_WEAPSWITCH_PICKUP = MAKE_MENUOPTIONSET( MEOSN_GAMESETUP_WEAPSWITCH_PICKUP, NULL, 0x2 );
 static MenuOption_t MEO_GAMESETUP_WEAPSWITCH_PICKUP = MAKE_MENUOPTION( &MF_Redfont, &MEOS_GAMESETUP_WEAPSWITCH_PICKUP, NULL );
@@ -489,6 +509,15 @@ static MenuEntry_t ME_GAMESETUP_QUICKSWITCH = MAKE_MENUENTRY("Quick weapon switc
 static MenuLink_t MEO_GAMESETUP_CHEATS = { MENU_CHEATS, MA_Advance, };
 static MenuEntry_t ME_GAMESETUP_CHEATS = MAKE_MENUENTRY( "Cheats", &MF_Redfont, &MEF_BigOptionsRt, &MEO_GAMESETUP_CHEATS, Link );
 
+static MenuEntry_t *MEL_GAMESETUP_AWOL[] = { // MiSTer: A.W.O.L.'s Game Setup
+    &ME_AWOL_ADSMODE,
+    &ME_AWOL_WEATHER,
+    &ME_AWOL_PARTICLES,
+    &ME_AWOL_TEXTSPEED,
+    &ME_AWOL_SUBTITLES,
+    &ME_AWOL_PERFMDL,
+    &ME_GAMESETUP_CHEATS,
+};
 static MenuEntry_t *MEL_GAMESETUP[] = {
     &ME_ADULTMODE,
 #if defined STARTUP_SETUP_WINDOW && !defined EDUKE32_RETAIL_MENU
@@ -680,6 +709,8 @@ static MenuEntry_t ME_DISPLAYSETUP_TOUCHALPHA = MAKE_MENUENTRY("UI opacity:", &M
 
 static char const s_Scale[] = "Scale:";
 
+static char const *MEOSN_AWOL_CROSSHAIR[] = { "Off", "On", "Crosshair only", }; // MiSTer: A.W.O.L.'s third setting
+static MenuOptionSet_t MEOS_AWOL_CROSSHAIR = MAKE_MENUOPTIONSET( MEOSN_AWOL_CROSSHAIR, NULL, 0x2 );
 static MenuOption_t MEO_SCREENSETUP_CROSSHAIR = MAKE_MENUOPTION(&MF_Redfont, &MEOS_OffOn, &ud.crosshair);
 static MenuEntry_t ME_SCREENSETUP_CROSSHAIR = MAKE_MENUENTRY( "Crosshair:", &MF_Redfont, &MEF_BigOptionsRt, &MEO_SCREENSETUP_CROSSHAIR, Option );
 static MenuRangeInt32_t MEO_SCREENSETUP_CROSSHAIRSIZE = MAKE_MENURANGE( &ud.crosshairscale, &MF_Redfont, 25, 100, 0, 16, DisplayTypePercent );
@@ -2023,6 +2054,14 @@ void Menu_Init(void)
     {
         MMF_Top_Skill.pos.x = (320<<15);
         ME_SKILL_TEMPLATE.format = &MEF_LeftMenu;
+    }
+    if (AWOL) // MiSTer: A.W.O.L.'s own options in Game Setup, its crosshair setting
+    {
+#ifndef EDUKE32_RETAIL_MENU
+        M_GAMESETUP.entrylist = MEL_GAMESETUP_AWOL;
+        M_GAMESETUP.numEntries = ARRAY_SIZE(MEL_GAMESETUP_AWOL);
+#endif
+        MEO_SCREENSETUP_CROSSHAIR.options = &MEOS_AWOL_CROSSHAIR;
     }
 
     // prepare menu fonts

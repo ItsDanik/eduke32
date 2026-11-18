@@ -31,6 +31,15 @@
 #include "vfs.h"
 #include "mister.h"
 
+#ifdef MISTER_HYBRID
+// The sector sprite lists as each thread reads them (build.h): the arrays
+// for every thread but the renderer's, which points these at its copy
+// (mister_port.cpp), as it does sector, wall and sprite
+__thread int16_t *headspritesect = headspritesectStorage;
+__thread int16_t *prevspritesect = prevspritesectStorage;
+__thread int16_t *nextspritesect = nextspritesectStorage;
+#endif
+
 #ifdef USE_OPENGL
 # include "glad/glad.h"
 # include "glsurface.h"
@@ -1819,6 +1828,10 @@ static void classicScanSector(int16_t startsectnum)
         {
             auto const spr = (uspriteptr_t)&sprite[i];
 
+#ifdef MISTER_HYBRID
+            if (spr->sectnum != sectnum)  // moved or deleted by the game's thread meanwhile
+                continue;
+#endif
             if (((spr->cstat & 0x8000) && !showinvisibility) || spr->xrepeat == 0 || spr->yrepeat == 0)
                 continue;
 
@@ -1873,6 +1886,14 @@ static void classicScanSector(int16_t startsectnum)
                         ((uint64_t)tempint+262144) < 524288)  // BXY_MAX?
                         if (mulscale5(tempint,tempint) <= (x2-x1)*(x2-x1)+(y2-y1)*(y2-y1))
                         {
+                            if (sectorbordercnt >= (int32_t)ARRAY_SIZE(sectorborder))
+                            {
+                                // a scan gone wrong (MiSTer: the world changing under the renderer) stops here
+                                static int said;
+                                if (!said++)
+                                    LOG_F(ERROR, "!!sectorborder: %d sectors to scan from sector %d", sectorbordercnt, startsectnum);
+                                return;
+                            }
                             sectorborder[sectorbordercnt++] = nextsectnum;
                             bitmap_set(gotsector, nextsectnum);
                         }
@@ -5483,7 +5504,8 @@ static void classicDrawSprite(int32_t snum)
     auto const tspr = tspriteptr[snum];
     const int32_t sectnum = tspr->sectnum;
 
-    if (sectnum < 0 || bad_tspr(tspr))
+    // >= MAXSECTORS: deleted while the renderer's thread copied it (MiSTer)
+    if ((unsigned)sectnum >= MAXSECTORS || bad_tspr(tspr))
         return;
 
     int32_t x1, y1, x2, y2, i, j, k, x;
@@ -7751,6 +7773,7 @@ static int32_t clippoly4(int32_t cx1, int32_t cy1, int32_t cx2, int32_t cy2)
 //  ret_yxaspect, ret_xyaspect: out
 #ifdef MISTER_HYBRID
 int32_t rotatesprite_mister_yofs;
+static int32_t misterRotPicnum;  // the tile of the 2D draw being placed (MISTER_HYBRID_2DLOG)
 
 // The core shows every mode 4:3 (mister.h): 2D art is drawn from 320x200 with
 // each of its rows one line and each column xdim/320 pixels, never stretched
@@ -7769,6 +7792,15 @@ static void dorotspr_mister(int32_t *sxptr, int32_t *syptr, int32_t *z, int32_t 
         return;
     }
 
+    // The game's 2D space is 320 wide and 200 lines high, or as high as
+    // draw_yxaspect makes it (Ion Fury: 240, its art laid out for a 4:3
+    // screen of square pixels, and right at 240 lines). Where the screen has
+    // fewer lines than that (Ion Fury at 200 lines), the draws are scaled
+    // down by the ratio around the center, so that the picture of the taller
+    // mode is squeezed to the screen and nothing falls off the bottom.
+    int32_t const vh     = rotatesprite_yxaspect == 65536 ? 200 : divscale16(200, rotatesprite_yxaspect);
+    int32_t const vscale = mulscale16(rotatesprite_yxaspect, divscale16(min(ydim, vh), vh));
+
     int32_t const sx = *sxptr, sy = *syptr + rotatesprite_y_offset;
     int32_t const normxofs = sx-(320<<15), normyofs = sy-(200<<15);
     int32_t zoomsc;
@@ -7776,13 +7808,13 @@ static void dorotspr_mister(int32_t *sxptr, int32_t *syptr, int32_t *z, int32_t 
     if (!(dastat & RS_NOCLIP))
     {
         // in the view's window, scaled as it is
-        zoomsc = mulscale16(scale(xdimen, yx2d, 320), rotatesprite_yxaspect);
+        zoomsc = mulscale16(scale(xdimen, yx2d, 320), vscale);
         *sxptr = ((cx1_plus_cx2+2)<<15) + scale(normxofs, xdimen, 320);
         *syptr = ((cy1_plus_cy2+2)<<15) + mulscale16(normyofs, zoomsc);
     }
     else
     {
-        zoomsc = mulscale16(scale(xdim, yx2d, 320), rotatesprite_yxaspect);
+        zoomsc = mulscale16(scale(xdim, yx2d, 320), vscale);
         *sxptr = (xdim<<15)+32768 + scale(normxofs, xdim, 320);
         *syptr = (ydim<<15)+32768 + mulscale16(normyofs, zoomsc);
         if (dastat & RS_CENTERORIGIN)
@@ -7791,8 +7823,22 @@ static void dorotspr_mister(int32_t *sxptr, int32_t *syptr, int32_t *z, int32_t 
 
     *syptr += rotatesprite_mister_yofs<<16;
     *z = mulscale16(*z, zoomsc);
-    *ret_yxaspect = mulscale16(yx2d, rotatesprite_yxaspect);
-    *ret_xyaspect = divscale16(xy2d, rotatesprite_yxaspect);
+    *ret_yxaspect = mulscale16(yx2d, vscale);
+    *ret_xyaspect = divscale16(xy2d, vscale);
+
+    static int log2d = -1;
+    if (log2d < 0)
+        log2d = getenv("MISTER_HYBRID_2DLOG") ? atoi(getenv("MISTER_HYBRID_2DLOG")) : 0;
+    static int logtile = -1;
+    if (logtile < 0)
+        logtile = getenv("MISTER_HYBRID_2DLOGTILE") ? atoi(getenv("MISTER_HYBRID_2DLOGTILE")) : 0;
+    if (log2d > 0 && (logtile == 0 || misterRotPicnum == logtile || (logtile < 0 && ydim > 0)))
+    {
+        log2d--;
+        LOG_F(INFO, "mister 2d: tile %d in %d,%d stat %x aspect %d yofs %d vh %d vscale %d -> out %d,%d z %d (screen %dx%d, window y %d..%d)",
+              misterRotPicnum, sx >> 16, sy >> 16, dastat, rotatesprite_yxaspect, rotatesprite_mister_yofs, vh, vscale,
+              *sxptr >> 16, *syptr >> 16, *z, xdim, ydim, windowxy1.y, windowxy2.y);
+    }
 }
 #endif
 
@@ -8045,6 +8091,12 @@ static void dorotatesprite(int32_t sx, int32_t sy, int32_t z, int16_t a, int16_t
 
     cosang = sintable[(a+512)&2047];
     sinang = sintable[a&2047];
+
+    #ifdef MISTER_HYBRID
+
+    misterRotPicnum = picnum;
+
+    #endif
 
     dorotspr_handle_bit2(&sx, &sy, &z, dastat, cx1+cx2, cy1+cy2, &ouryxaspect, &ourxyaspect);
 
@@ -11166,6 +11218,12 @@ int32_t engineLoadBoard(const char *filename, char flags, vec3_t *dapos, int16_t
     flags &= 3;
 
     buildvfs_kfd fil;
+
+#ifdef MISTER_HYBRID
+    // a new level: what the file lookup cache knows is looked up afresh
+    // (files another program put there since)
+    vfs_pathcache_flush();
+#endif
     if ((fil = kopen4load(filename,flags)) == buildvfs_kfd_invalid)
         { mapversion = 7; return -1; }
 

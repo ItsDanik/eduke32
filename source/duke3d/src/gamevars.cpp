@@ -26,6 +26,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include "vfs.h"
 #include "gamestructures.h"
+#include "lz4.h"
 
 gamevar_t   aGameVars[MAXGAMEVARS];
 gamearray_t aGameArrays[MAXGAMEARRAYS];
@@ -470,8 +471,10 @@ int Gv_ReadSave(buildvfs_kfd kFile)
                     }
                     else if (readVar.flags & GAMEVAR_PERACTOR)
                     {
-                        sv.vars[index] = (intptr_t *)Xaligned_alloc(ACTOR_VAR_ALIGNMENT, MAXSPRITES * sizeof(sv.vars[0][0]));
-                        A_(kdfread_LZ4(sv.vars[index], sizeof(sv.vars[0][0]) * MAXSPRITES, 1, kFile) == 1);
+                        auto raw = (intptr_t *)Xmalloc(MAXSPRITES * sizeof(sv.vars[0][0]));
+                        A_(kdfread_LZ4(raw, sizeof(sv.vars[0][0]) * MAXSPRITES, 1, kFile) == 1);
+                        sv.vars[index] = Gv_PackActorVars(nullptr, raw);
+                        Xfree(raw);
                     }
                     else
                         A_(!kread_and_test(kFile, &sv.vars[index], sizeof(sv.vars[0][0])));
@@ -862,7 +865,12 @@ void Gv_WriteSave(buildvfs_FILE fil)
                     if (var.flags & GAMEVAR_PERPLAYER)
                         dfwrite_LZ4(sv.vars[idx], sizeof(sv.vars[0][0]) * MAXPLAYERS, 1, fil);
                     else if (var.flags & GAMEVAR_PERACTOR)
-                        dfwrite_LZ4(sv.vars[idx], sizeof(sv.vars[0][0]) * MAXSPRITES, 1, fil);
+                    {
+                        auto raw = (intptr_t *)Xmalloc(MAXSPRITES * sizeof(sv.vars[0][0]));
+                        Gv_UnpackActorVars(raw, sv.vars[idx]);
+                        dfwrite_LZ4(raw, sizeof(sv.vars[0][0]) * MAXSPRITES, 1, fil);
+                        Xfree(raw);
+                    }
                     else
                         buildvfs_fwrite(&sv.vars[idx], sizeof(sv.vars[0][0]), 1, fil);
                 }
@@ -936,6 +944,54 @@ void Gv_DumpValues(void)
         buildprint("\n");
     }
     buildprint("\n// end of game definitions\n");
+}
+
+intptr_t *Gv_PackActorVars(intptr_t *packed, intptr_t const *values)
+{
+    int const rawSize = MAXSPRITES * sizeof(intptr_t);
+    int const bound   = LZ4_compressBound(rawSize);
+    auto      tmp     = (char *)Xmalloc(bound);
+    int const len     = LZ4_compress_default((char const *)values, tmp, rawSize, bound);
+
+    if (packed)
+        Xaligned_free(packed);
+
+    if (len <= 0)
+    {
+        packed = (intptr_t *)Xaligned_alloc(ACTOR_VAR_ALIGNMENT, sizeof(int32_t) + rawSize);
+        ((int32_t *)packed)[0] = 0;
+        Bmemcpy((char *)packed + sizeof(int32_t), values, rawSize);
+    }
+    else
+    {
+        packed = (intptr_t *)Xaligned_alloc(ACTOR_VAR_ALIGNMENT, sizeof(int32_t) + len);
+        ((int32_t *)packed)[0] = len;
+        Bmemcpy((char *)packed + sizeof(int32_t), tmp, len);
+    }
+
+    Xfree(tmp);
+    return packed;
+}
+
+void Gv_UnpackActorVars(intptr_t *values, intptr_t const *packed)
+{
+    int const     rawSize = MAXSPRITES * sizeof(intptr_t);
+    int32_t const len     = ((int32_t const *)packed)[0];
+    char const   *src     = (char const *)packed + sizeof(int32_t);
+
+    if (len == 0)
+    {
+        Bmemcpy(values, src, rawSize);
+        return;
+    }
+
+    int const got = LZ4_decompress_safe(src, (char *)values, len, rawSize);
+
+    if (got != rawSize)
+    {
+        LOG_F(ERROR, "Gv_UnpackActorVars: bad packed block (%d of %d bytes)", got, rawSize);
+        Bmemset(values, 0, rawSize);
+    }
 }
 
 // XXX: This function is very strange.
@@ -1834,12 +1890,12 @@ static void Gv_AddSystemVars(void)
     Gv_NewVar("viewingrange",          (intptr_t)&viewingrange,                 GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
     Gv_NewVar("weapon_xoffset",        (intptr_t)&hudweap.gunposx,              GAMEVAR_SYSTEM | GAMEVAR_INT32PTR);
     Gv_NewVar("weaponcount",           (intptr_t)&hudweap.count,                GAMEVAR_SYSTEM | GAMEVAR_INT32PTR);
-    Gv_NewVar("windowx1",              (intptr_t)&windowxy1.x,                  GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
-    Gv_NewVar("windowx2",              (intptr_t)&windowxy2.x,                  GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
-    Gv_NewVar("windowy1",              (intptr_t)&windowxy1.y,                  GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
-    Gv_NewVar("windowy2",              (intptr_t)&windowxy2.y,                  GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
-    Gv_NewVar("xdim",                  (intptr_t)&xdim,                         GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
-    Gv_NewVar("ydim",                  (intptr_t)&ydim,                         GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
+    Gv_NewVar("windowx1",              (intptr_t)&MISTER_CON_WINDOWX1,                  GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
+    Gv_NewVar("windowx2",              (intptr_t)&MISTER_CON_WINDOWX2,                  GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
+    Gv_NewVar("windowy1",              (intptr_t)&MISTER_CON_WINDOWY1,                  GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
+    Gv_NewVar("windowy2",              (intptr_t)&MISTER_CON_WINDOWY2,                  GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
+    Gv_NewVar("xdim",                  (intptr_t)&MISTER_CON_XDIM,                         GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
+    Gv_NewVar("ydim",                  (intptr_t)&MISTER_CON_YDIM,                         GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
     Gv_NewVar("yxaspect",              (intptr_t)&yxaspect,                     GAMEVAR_SYSTEM | GAMEVAR_INT32PTR | GAMEVAR_READONLY);
 
 #ifdef USE_OPENGL
@@ -1981,12 +2037,12 @@ void Gv_RefreshPointers(void)
     aGameVars[Gv_GetVarIndex("viewingrange")].global      = (intptr_t)&viewingrange;
     aGameVars[Gv_GetVarIndex("weapon_xoffset")].global    = (intptr_t)&hudweap.gunposx;
     aGameVars[Gv_GetVarIndex("weaponcount")].global       = (intptr_t)&hudweap.count;
-    aGameVars[Gv_GetVarIndex("windowx1")].global          = (intptr_t)&windowxy1.x;
-    aGameVars[Gv_GetVarIndex("windowx2")].global          = (intptr_t)&windowxy2.x;
-    aGameVars[Gv_GetVarIndex("windowy1")].global          = (intptr_t)&windowxy1.y;
-    aGameVars[Gv_GetVarIndex("windowy2")].global          = (intptr_t)&windowxy2.y;
-    aGameVars[Gv_GetVarIndex("xdim")].global              = (intptr_t)&xdim;
-    aGameVars[Gv_GetVarIndex("ydim")].global              = (intptr_t)&ydim;
+    aGameVars[Gv_GetVarIndex("windowx1")].global          = (intptr_t)&MISTER_CON_WINDOWX1;
+    aGameVars[Gv_GetVarIndex("windowx2")].global          = (intptr_t)&MISTER_CON_WINDOWX2;
+    aGameVars[Gv_GetVarIndex("windowy1")].global          = (intptr_t)&MISTER_CON_WINDOWY1;
+    aGameVars[Gv_GetVarIndex("windowy2")].global          = (intptr_t)&MISTER_CON_WINDOWY2;
+    aGameVars[Gv_GetVarIndex("xdim")].global              = (intptr_t)&MISTER_CON_XDIM;
+    aGameVars[Gv_GetVarIndex("ydim")].global              = (intptr_t)&MISTER_CON_YDIM;
     aGameVars[Gv_GetVarIndex("yxaspect")].global          = (intptr_t)&yxaspect;
 
 #ifdef USE_OPENGL

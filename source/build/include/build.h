@@ -622,9 +622,18 @@ EXTERN spritesmooth_t *spritesmooth;
 EXTERN wallext_t *wallext;
 # endif
 
-EXTERN sectortype *sector;
-EXTERN walltype *wall;
-EXTERN spritetype *sprite;
+#ifdef MISTER_HYBRID
+// Thread-local: the game's thread reads the engine's arrays through these,
+// the renderer's thread (duke3d/src/mister_port.cpp) a copy of its own that
+// the game's thread fills before each view, so that the renderer sees the
+// world of one moment while the game moves on.
+# define MISTER_WORLD_THREAD __thread
+#else
+# define MISTER_WORLD_THREAD
+#endif
+EXTERN MISTER_WORLD_THREAD sectortype *sector;
+EXTERN MISTER_WORLD_THREAD walltype *wall;
+EXTERN MISTER_WORLD_THREAD spritetype *sprite;
 EXTERN tspriteptr_t tsprite;
 #else
 EXTERN spriteext_t spriteext[MAXSPRITES+MAXUNIQHUDID];
@@ -633,9 +642,22 @@ EXTERN spritesmooth_t spritesmooth[MAXSPRITES+MAXUNIQHUDID];
 EXTERN wallext_t wallext[MAXWALLS];
 # endif
 
+#ifdef MISTER_HYBRID
+// The world: the arrays, and the pointers each thread reads them through.
+// The game's thread reads the arrays themselves; the renderer's thread
+// (duke3d/src/mister_port.cpp) a copy of its own, filled before each view it
+// draws, so that it sees the world of one moment while the game moves on.
+EXTERN sectortype sectorStorage[MAXSECTORS + M32_FIXME_SECTORS];
+EXTERN walltype wallStorage[MAXWALLS + M32_FIXME_WALLS];
+EXTERN spritetype spriteStorage[MAXSPRITES];
+extern __thread sectortype *sector;
+extern __thread walltype *wall;
+extern __thread spritetype *sprite;
+#else
 EXTERN sectortype sector[MAXSECTORS + M32_FIXME_SECTORS];
 EXTERN walltype wall[MAXWALLS + M32_FIXME_WALLS];
 EXTERN spritetype sprite[MAXSPRITES];
+#endif
 EXTERN tspritetype tsprite[MAXSPRITESONSCREEN];
 #endif
 
@@ -888,9 +910,17 @@ extern int16_t pskybits_override;
 // (or -1 if freelist is empty):
 EXTERN int16_t tailspritefree;
 
+#ifdef MISTER_HYBRID
+// the sector lists with the world (above); the status lists are the game's
+EXTERN int16_t headspritesectStorage[MAXSECTORS+1], headspritestat[MAXSTATUS+1];
+EXTERN int16_t prevspritesectStorage[MAXSPRITES], prevspritestat[MAXSPRITES];
+EXTERN int16_t nextspritesectStorage[MAXSPRITES], nextspritestat[MAXSPRITES];
+extern __thread int16_t *headspritesect, *prevspritesect, *nextspritesect;
+#else
 EXTERN int16_t headspritesect[MAXSECTORS+1], headspritestat[MAXSTATUS+1];
 EXTERN int16_t prevspritesect[MAXSPRITES], prevspritestat[MAXSPRITES];
 EXTERN int16_t nextspritesect[MAXSPRITES], nextspritestat[MAXSPRITES];
+#endif
 
 EXTERN vec2_16_t tilesiz[MAXTILES];
 

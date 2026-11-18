@@ -3722,6 +3722,8 @@ breakfor:
 #ifndef EDUKE32_STANDALONE
                 if (!FURY)
                     A_SpawnGlass(vm.spriteNum, *insptr++);
+                else
+                    insptr++;
 #else
                 insptr++;
 #endif
@@ -3737,6 +3739,8 @@ breakfor:
                         int const numShards = Gv_GetVar(*insptr++);
                         A_SpawnWallGlass(vm.spriteNum, wallNum, numShards);
                     }
+                    else
+                        insptr += 2;
 #else
                     Gv_GetVar(*insptr++);
                     Gv_GetVar(*insptr++);
@@ -3754,6 +3758,8 @@ breakfor:
                         int const numShards = Gv_GetVar(*insptr++);
                         A_SpawnRandomGlass(vm.spriteNum, wallNum, numShards);
                     }
+                    else
+                        insptr += 2;
 #else
                     Gv_GetVar(*insptr++);
                     Gv_GetVar(*insptr++);
@@ -3771,6 +3777,8 @@ breakfor:
                         int const numShards = Gv_GetVar(*insptr++);
                         A_SpawnCeilingGlass(vm.spriteNum, sectNum, numShards);
                     }
+                    else
+                        insptr += 2;
 #else
                     Gv_GetVar(*insptr++);
                     Gv_GetVar(*insptr++);
@@ -4740,7 +4748,7 @@ breakfor:
                     NEG_ALPHA_TO_BLEND(alpha, blendidx, v.orientation);
 
                     rotatesprite_(v.pos.x, v.pos.y, v.pos.z, v.ang, v.tilenum, v.shade, v.pal, 2 | (v.orientation & (ROTATESPRITE_MAX - 1)), alpha,
-                                  blendidx, bound[0].x, bound[0].y, bound[1].x, bound[1].y);
+                                  blendidx, MISTER_CON_X1(bound[0].x), MISTER_CON_Y1(bound[0].y), MISTER_CON_X2(bound[1].x), MISTER_CON_Y2(bound[1].y));
                     dispatch();
                 }
 
@@ -4763,7 +4771,7 @@ breakfor:
                     int32_t const z = (VM_DECODE_INST(tw) == CON_GAMETEXTZ) ? Gv_GetVar(*insptr++) : 65536;
 
                     G_PrintGameText(v.tilenum, v.pos.x >> 1, v.pos.y, apStrings[v.nQuote], v.shade, v.pal, v.orientation & (ROTATESPRITE_MAX - 1),
-                                    v.bound[0].x, v.bound[0].y, v.bound[1].x, v.bound[1].y, z, 0);
+                                    MISTER_CON_X1(v.bound[0].x), MISTER_CON_Y1(v.bound[0].y), MISTER_CON_X2(v.bound[1].x), MISTER_CON_Y2(v.bound[1].y), z, 0);
                     dispatch();
                 }
 
@@ -4786,8 +4794,8 @@ breakfor:
 
                     // NOTE: '-' not taken into account, but we have rotatesprite() bound check now anyway
 
-                    G_DrawTXDigiNumZ(v.tilenum, v.pos.x, v.pos.y, v.nQuote, v.shade, v.pal, v.orientation & (ROTATESPRITE_MAX - 1), v.bound[0].x,
-                                     v.bound[0].y, v.bound[1].x, v.bound[1].y, nZoom);
+                    G_DrawTXDigiNumZ(v.tilenum, v.pos.x, v.pos.y, v.nQuote, v.shade, v.pal, v.orientation & (ROTATESPRITE_MAX - 1), MISTER_CON_X1(v.bound[0].x),
+                                     MISTER_CON_Y1(v.bound[0].y), MISTER_CON_X2(v.bound[1].x), MISTER_CON_Y2(v.bound[1].y), nZoom);
                     dispatch();
                 }
 
@@ -4838,7 +4846,7 @@ breakfor:
 
                     G_ScreenText(v.tilenum, v.v.x, v.v.y, v.v.z, v.blockangle, v.charangle, apStrings[v.nQuote], v.shade, v.pal,
                                  2 | (v.orientation & (ROTATESPRITE_MAX - 1)), v.alpha, v.spacing.x, v.spacing.y, v.between.x, v.between.y, v.nFlags,
-                                 v.bound[0].x, v.bound[0].y, v.bound[1].x, v.bound[1].y);
+                                 MISTER_CON_X1(v.bound[0].x), MISTER_CON_Y1(v.bound[0].y), MISTER_CON_X2(v.bound[1].x), MISTER_CON_Y2(v.bound[1].y));
                     dispatch();
                 }
 
@@ -5292,6 +5300,8 @@ breakfor:
                                 sprite[spriteNum].pal  = vm.pSprite->pal;
                             }
                     }
+                    else
+                        insptr++;
 #else
                     insptr++;
 #endif
@@ -6525,7 +6535,7 @@ breakfor:
 
                     Gv_FillWithVars(v);
 
-                    renderDrawLine(v.pos[0].x, v.pos[0].y, v.pos[1].x, v.pos[1].y, v.index);
+                    renderDrawLine(MISTER_CON_X1(v.pos[0].x), MISTER_CON_Y1(v.pos[0].y), MISTER_CON_X1(v.pos[1].x), MISTER_CON_Y1(v.pos[1].y), v.index);
                 }
                 dispatch();
 
@@ -6543,7 +6553,7 @@ breakfor:
                     palette_t const p
                     = { (uint8_t)(v.rgb & 0xFF), (uint8_t)((v.rgb >> 8) & 0xFF), (uint8_t)((v.rgb >> 16) & 0xFF), (uint8_t)v.index };
 
-                    drawlinergb(v.pos[0].x, v.pos[0].y, v.pos[1].x, v.pos[1].y, p);
+                    drawlinergb(MISTER_CON_X1(v.pos[0].x), MISTER_CON_Y1(v.pos[0].y), MISTER_CON_X1(v.pos[1].x), MISTER_CON_Y1(v.pos[1].y), p);
                 }
                 dispatch();
 
@@ -6964,6 +6974,8 @@ void VM_UpdateAnim(int const spriteNum, int32_t * const pData)
 // NORECURSE
 void A_Execute(int const spriteNum, int const playerNum, int const playerDist)
 {
+    MISTER_RENDER_POLL();
+    MISTER_TRACE(mainActor, spriteNum);
     // for some reason this is faster than using the C++ syntax; e.g vm = vmstate_t{ ... }
     vmstate_t const tempvm
     = { spriteNum, playerNum, playerDist, 0, &sprite[spriteNum], &actor[spriteNum].t_data[0], g_player[playerNum].ps, &actor[spriteNum] };
@@ -7107,9 +7119,9 @@ void G_SaveMapState(void)
 
     save->numsprites = Numsprites;
     save->tailspritefree = tailspritefree;
-    Bmemcpy(&save->headspritesect[0],&headspritesect[0],sizeof(headspritesect));
-    Bmemcpy(&save->prevspritesect[0],&prevspritesect[0],sizeof(prevspritesect));
-    Bmemcpy(&save->nextspritesect[0],&nextspritesect[0],sizeof(nextspritesect));
+    Bmemcpy(&save->headspritesect[0],&headspritesect[0],sizeof(save->headspritesect));
+    Bmemcpy(&save->prevspritesect[0],&prevspritesect[0],sizeof(save->prevspritesect));
+    Bmemcpy(&save->nextspritesect[0],&nextspritesect[0],sizeof(save->nextspritesect));
     Bmemcpy(&save->headspritestat[0],&headspritestat[0],sizeof(headspritestat));
     Bmemcpy(&save->prevspritestat[0],&prevspritestat[0],sizeof(prevspritestat));
     Bmemcpy(&save->nextspritestat[0],&nextspritestat[0],sizeof(nextspritestat));
@@ -7169,11 +7181,7 @@ void G_SaveMapState(void)
             Bmemcpy(&save->vars[i][0], aGameVars[i].pValues, sizeof(intptr_t) * MAXPLAYERS);
         }
         else if (aGameVars[i].flags & GAMEVAR_PERACTOR)
-        {
-            if (!save->vars[i])
-                save->vars[i] = (intptr_t *)Xaligned_alloc(ACTOR_VAR_ALIGNMENT, MAXSPRITES * sizeof(intptr_t));
-            Bmemcpy(&save->vars[i][0], aGameVars[i].pValues, sizeof(intptr_t) * MAXSPRITES);
-        }
+            save->vars[i] = Gv_PackActorVars(save->vars[i], aGameVars[i].pValues);
         else
             save->vars[i] = (intptr_t *)aGameVars[i].global;
     }
@@ -7229,9 +7237,9 @@ void G_RestoreMapState(void)
         }
         Numsprites = pSavedState->numsprites;
         tailspritefree = pSavedState->tailspritefree;
-        Bmemcpy(&headspritesect[0],&pSavedState->headspritesect[0],sizeof(headspritesect));
-        Bmemcpy(&prevspritesect[0],&pSavedState->prevspritesect[0],sizeof(prevspritesect));
-        Bmemcpy(&nextspritesect[0],&pSavedState->nextspritesect[0],sizeof(nextspritesect));
+        Bmemcpy(&headspritesect[0],&pSavedState->headspritesect[0],sizeof(pSavedState->headspritesect));
+        Bmemcpy(&prevspritesect[0],&pSavedState->prevspritesect[0],sizeof(pSavedState->prevspritesect));
+        Bmemcpy(&nextspritesect[0],&pSavedState->nextspritesect[0],sizeof(pSavedState->nextspritesect));
         Bmemcpy(&headspritestat[0],&pSavedState->headspritestat[0],sizeof(headspritestat));
         Bmemcpy(&prevspritestat[0],&pSavedState->prevspritestat[0],sizeof(prevspritestat));
         Bmemcpy(&nextspritestat[0],&pSavedState->nextspritestat[0],sizeof(nextspritestat));
@@ -7289,7 +7297,7 @@ void G_RestoreMapState(void)
             {
                 if (!pSavedState->vars[i])
                     continue;
-                Bmemcpy(aGameVars[i].pValues, pSavedState->vars[i], sizeof(intptr_t) * MAXSPRITES);
+                Gv_UnpackActorVars(aGameVars[i].pValues, pSavedState->vars[i]);
             }
             else
                 aGameVars[i].global = (intptr_t)pSavedState->vars[i];

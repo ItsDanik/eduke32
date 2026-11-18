@@ -117,8 +117,15 @@ void cache1d::inc_and_check_cacnum(void)
     }
 }
 
+#ifdef MISTER_HYBRID
+# include "mister.h"
+#else
+# define MISTER_IO_GUARD ((void)0)
+#endif
+
 void cache1d::allocateBlock(intptr_t *newhandle, int32_t newbytes, char *newlockptr)
 {
+    MISTER_IO_GUARD;
     int i, z, zz, bestz=0, daval, bestval, besto=0, o1, o2, sucklen, suckz;
 
     newbytes = ((newbytes+15)& ~15);
@@ -252,6 +259,7 @@ void cache1d::allocateBlock(intptr_t *newhandle, int32_t newbytes, char *newlock
 
 void cache1d::ageBlocks(void)
 {
+    MISTER_IO_GUARD;
     static int agecount;
 
     if (agecount >= m_numBlocks)
