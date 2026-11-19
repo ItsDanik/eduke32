@@ -2308,7 +2308,19 @@ void P_DisplayWeapon(void)
     hudweap.count       = *weaponFrame;
     hudweap.lookhalfang = pPlayer->look_ang >> 1;
 
+#ifdef MISTER_HYBRID
+    // AWOL draws its weapon hands for a 200-line screen (y up to 205) but its HUD and
+    // cutscenes for the 240-line space of its draw_yxaspect 54613: the draws of its weapon
+    // event keep the plain aspect (engine.cpp dorotspr_mister), or the hands float a sixth up
+    extern int32_t mister2DForcePlain;
+    mister2DForcePlain = AWOL ? 1 : 0;
+    int misterWeaponEvent;   // no initializer: a goto enddisplayweapon above jumps past this
+    misterWeaponEvent = VM_OnEvent(EVENT_DISPLAYWEAPON, pPlayer->i, screenpeek);
+    mister2DForcePlain = 0;
+    if (misterWeaponEvent == 0)
+#else
     if (VM_OnEvent(EVENT_DISPLAYWEAPON, pPlayer->i, screenpeek) == 0)
+#endif
     {
 #ifndef EDUKE32_STANDALONE
         int const quickKickFrame = 14 - pPlayer->quick_kick;

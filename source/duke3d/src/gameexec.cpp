@@ -151,6 +151,76 @@ static inline void VM_DummySprite(void)
     vm.pData    = &dummy_actor.t_data[0];
 }
 
+#ifdef MISTER_HYBRID
+// MISTER_HYBRID_CONPROFILE=1: every 2 s the log gets the actors and the events whose
+// CON code took the most time (inclusive: an event run from an actor's code counts for
+// both), with the game's average update time and the last frame time. For the
+// slowdowns ("AWOL: large slowdown with 4 enemies in a room", 2026-11-18).
+static double  misterActorMs[MAXTILES];
+static int32_t misterActorCalls[MAXTILES];
+static double  misterEventMs[MAXEVENTS];
+static int32_t misterEventCalls[MAXEVENTS];
+static int     misterConProfile = -1;
+
+static inline int MiSTer_ConProfile(void)
+{
+    if (misterConProfile < 0)
+        misterConProfile = getenv("MISTER_HYBRID_CONPROFILE") ? atoi(getenv("MISTER_HYBRID_CONPROFILE")) : 0;
+    return misterConProfile;
+}
+
+void MiSTer_ConProfileLog(double updateMs, double frameMs)
+{
+    if (!MiSTer_ConProfile())
+        return;
+    static uint32_t last;
+    uint32_t const now = timerGetTicks();
+    if (now - last < 2000)
+        return;
+    last = now;
+
+    char buf[1536];
+    int len = 0;
+    double total = 0;
+    for (int i = 0; i < MAXTILES; i++)
+        total += misterActorMs[i];
+    len += Bsnprintf(buf + len, sizeof(buf) - len, "mister con: 2 s: actors %.0f ms:", total);
+    for (int n = 0; n < 8 && len < (int)sizeof(buf) - 64; n++)
+    {
+        int best = -1;
+        for (int i = 0; i < MAXTILES; i++)
+            if (misterActorMs[i] > 0 && (best < 0 || misterActorMs[i] > misterActorMs[best]))
+                best = i;
+        if (best < 0)
+            break;
+        len += Bsnprintf(buf + len, sizeof(buf) - len, " %s(%d) %.0f ms/%d", g_tileLabels[best] ? g_tileLabels[best] : "?",
+                         best, misterActorMs[best], misterActorCalls[best]);
+        misterActorMs[best] = 0;
+    }
+    total = 0;
+    for (int i = 0; i < MAXEVENTS; i++)
+        total += misterEventMs[i];
+    len += Bsnprintf(buf + len, sizeof(buf) - len, "; events %.0f ms:", total);
+    for (int n = 0; n < 6 && len < (int)sizeof(buf) - 64; n++)
+    {
+        int best = -1;
+        for (int i = 0; i < MAXEVENTS; i++)
+            if (misterEventMs[i] > 0 && (best < 0 || misterEventMs[i] > misterEventMs[best]))
+                best = i;
+        if (best < 0)
+            break;
+        len += Bsnprintf(buf + len, sizeof(buf) - len, " %s %.0f ms/%d", EventNames[best], misterEventMs[best], misterEventCalls[best]);
+        misterEventMs[best] = 0;
+    }
+    Bsnprintf(buf + len, sizeof(buf) - len, "; update avg %.1f ms, frame %.1f ms", updateMs, frameMs);
+    LOG_F(INFO, "%s", buf);
+    Bmemset(misterActorMs, 0, sizeof(misterActorMs));
+    Bmemset(misterActorCalls, 0, sizeof(misterActorCalls));
+    Bmemset(misterEventMs, 0, sizeof(misterEventMs));
+    Bmemset(misterEventCalls, 0, sizeof(misterEventCalls));
+}
+#endif
+
 // verification that the event actually exists happens elsewhere
 static FORCE_INLINE int32_t VM_EventInlineInternal__(int const eventNum, int const spriteNum, int const playerNum,
                                                        int const playerDist = -1, int32_t returnValue = 0)
@@ -186,7 +256,17 @@ static FORCE_INLINE int32_t VM_EventInlineInternal__(int const eventNum, int con
     if ((unsigned)playerNum >= (unsigned)g_mostConcurrentPlayers)
         vm.pPlayer = g_player[0].ps;
 
+#ifdef MISTER_HYBRID
+    double const misterT0 = MiSTer_ConProfile() ? timerGetFractionalTicks() : 0;
+#endif
     VM_Execute(true);
+#ifdef MISTER_HYBRID
+    if (MiSTer_ConProfile())
+    {
+        misterEventMs[eventNum] += timerGetFractionalTicks() - misterT0;
+        misterEventCalls[eventNum]++;
+    }
+#endif
     vm.flags &= ~VM_TERMINATE;
 
     if (vm.flags & VM_KILL)
@@ -7024,7 +7104,18 @@ void A_Execute(int const spriteNum, int const playerNum, int const playerDist)
     VM_UpdateAnim(vm.spriteNum, vm.pData);
 
     insptr = 4 + (g_tile[vm.pSprite->picnum].execPtr);
+#ifdef MISTER_HYBRID
+    int const    misterPic = vm.pSprite->picnum;
+    double const misterT0  = MiSTer_ConProfile() ? timerGetFractionalTicks() : 0;
+#endif
     VM_Execute(true);
+#ifdef MISTER_HYBRID
+    if (MiSTer_ConProfile())
+    {
+        misterActorMs[misterPic] += timerGetFractionalTicks() - misterT0;
+        misterActorCalls[misterPic]++;
+    }
+#endif
     vm.flags &= ~VM_TERMINATE;
     insptr = NULL;
 

@@ -305,6 +305,10 @@ extern int32_t kpzbufloadfil(buildvfs_kfd);
 
 #ifdef WITHKPLIB
 int32_t cache1d_file_fromzip(buildvfs_kfd fil);
+#ifdef MISTER_HYBRID
+// the handle is a deflated zip entry: seeking it inflates from its start
+int32_t cache1d_file_deflated(buildvfs_kfd fil);
+#endif
 #endif
 
 enum {

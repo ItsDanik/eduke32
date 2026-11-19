@@ -41,6 +41,11 @@ public:
     void    reset(void);
 
     int numBlocks(void) { return m_numBlocks; }
+#ifdef MISTER_HYBRID
+    // MISTER_HYBRID_CACHELOG=1: a statistics line every 2 seconds (ageBlocks)
+    void    misterLog(void);
+    int32_t misterAllocs{};   // allocateBlock() calls since the last line
+#endif
     cacheindex_t const * getIndex(void) { return m_index; }
 
 private:

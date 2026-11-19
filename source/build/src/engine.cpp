@@ -7773,17 +7773,38 @@ static int32_t clippoly4(int32_t cx1, int32_t cy1, int32_t cx2, int32_t cy2)
 //  ret_yxaspect, ret_xyaspect: out
 #ifdef MISTER_HYBRID
 int32_t rotatesprite_mister_yofs;
+// set by the game around draws laid out for 200 lines while its draw_yxaspect
+// says 240 (AWOL's weapon hands, EVENT_DISPLAYWEAPON): those keep the plain aspect
+int32_t mister2DForcePlain;
 static int32_t misterRotPicnum;  // the tile of the 2D draw being placed (MISTER_HYBRID_2DLOG)
 
 // The core shows every mode 4:3 (mister.h): 2D art is drawn from 320x200 with
 // each of its rows one line and each column xdim/320 pixels, never stretched
 // down the screen; with 240 lines its 200 are in the middle, and what is drawn
 // while rotatesprite_mister_yofs is set (the HUD) moves by that many lines.
+// MISTER_HYBRID_2DASPECT=0: the game's draw_yxaspect is ignored and the 2D
+// space is the plain 320x200 (AWOL lays its HUD out for 200 lines but sets
+// the aspect of a 240-line space, which the squeeze below then lifts off the
+// bottom and shrinks)
+static int32_t mister2DAspect(void)
+{
+    static int honor = -1;
+    if (honor < 0)
+    {
+        char const *env = getenv("MISTER_HYBRID_2DASPECT");
+        honor = env ? atoi(env) != 0 : 1;
+        if (!honor)
+            LOG_F(INFO, "mister: the game's 2D aspect is ignored, the 2D space is 320x200 (MISTER_HYBRID_2DASPECT=0)");
+    }
+    return honor ? rotatesprite_yxaspect : 65536;
+}
+
 static void dorotspr_mister(int32_t *sxptr, int32_t *syptr, int32_t *z, int32_t dastat,
                             int32_t cx1_plus_cx2, int32_t cy1_plus_cy2,
                             int32_t *ret_yxaspect, int32_t *ret_xyaspect)
 {
     int32_t const yx2d = divscale16(320, xdim), xy2d = divscale16(xdim, 320);
+    int32_t const rotatesprite_yxaspect = mister2DForcePlain ? 65536 : mister2DAspect();
 
     if ((dastat & RS_AUTO) == 0)
     {

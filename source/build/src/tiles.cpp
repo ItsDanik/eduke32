@@ -446,6 +446,18 @@ static int misterArtPreload(void)
     }
     return preload;
 }
+
+// A deflated ART entry cannot be seeked cheaply (kzseek() inflates from the
+// start of the entry, and every read of another file in the zip loses the
+// place): it is preloaded whatever MISTER_HYBRID_ARTPRELOAD says. AWOL's and
+// DukePlus' GRPs are zips with a deflated ART.
+static int misterArtDeflated(buildvfs_kfd fil, char const *fn)
+{
+    if (!cache1d_file_deflated(fil))
+        return 0;
+    LOG_F(INFO, "mister: %s is a deflated zip entry: preloaded into memory", fn);
+    return 1;
+}
 #endif
 
 void artPreloadFile(buildvfs_kfd const fil, artheader_t * const local)
@@ -571,7 +583,7 @@ static int32_t artReadIndexedFile(int32_t tilefilei)
 #ifndef USE_PHYSFS
         if (cache1d_file_fromzip(fil)
 #ifdef MISTER_HYBRID
-            && (permap || misterArtPreload())
+            && (permap || misterArtPreload() || misterArtDeflated(fil, fn))
 #endif
             )
 #else
@@ -667,6 +679,9 @@ bool tileLoad(int16_t tileNum)
         g_cache.allocateBlock(&waloff[tileNum], dasiz, &walock[tileNum]);
     }
 
+#ifdef MISTER_HYBRID
+    { extern int32_t g_misterTileLoads; g_misterTileLoads++; }
+#endif
     tileLoadData(tileNum, dasiz, (char *) waloff[tileNum]);
 
 #ifdef USE_OPENGL

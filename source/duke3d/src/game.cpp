@@ -6882,6 +6882,16 @@ int app_main(int argc, char const* const* argv)
 
     G_CheckCommandLine(argc,argv);
 
+#ifdef MISTER_HYBRID
+    // MISTER_HYBRID_NOINTRO=1 (the set's eduke32_env.sh / fury_env.sh): the
+    // logo animations and the title intro are skipped, as with -nologo
+    {
+        char const *e = getenv("MISTER_HYBRID_NOINTRO");
+        if (e && atoi(e))
+            g_noLogoAnim = g_noLogo = 1;
+    }
+#endif
+
     // This needs to happen afterwards, as G_CheckCommandLine() is where we set
     // up the command-line-provided search paths (duh).
     G_ExtInit();
@@ -7412,6 +7422,12 @@ MAIN_LOOP_RESTART:
         }
 
         g_gameUpdateAndDrawTime = g_gameUpdateTime + (double)g_lastFrameDuration * 1000.0 / (double)timerGetNanoTickRate();
+#ifdef MISTER_HYBRID
+        {
+            extern void MiSTer_ConProfileLog(double updateMs, double frameMs);
+            MiSTer_ConProfileLog(g_gameUpdateAvgTime, (double)g_lastFrameDuration * 1000.0 / (double)timerGetNanoTickRate());
+        }
+#endif
 
 #ifdef MISTER_HYBRID
         MiSTer_UpdateOptions();

@@ -126,6 +126,9 @@ void cache1d::inc_and_check_cacnum(void)
 void cache1d::allocateBlock(intptr_t *newhandle, int32_t newbytes, char *newlockptr)
 {
     MISTER_IO_GUARD;
+#ifdef MISTER_HYBRID
+    misterAllocs++;
+#endif
     int i, z, zz, bestz=0, daval, bestval, besto=0, o1, o2, sucklen, suckz;
 
     newbytes = ((newbytes+15)& ~15);
@@ -257,9 +260,49 @@ void cache1d::allocateBlock(intptr_t *newhandle, int32_t newbytes, char *newlock
 //        }
 //}
 
+#ifdef MISTER_HYBRID
+int32_t g_misterTileLoads;   // tiles.cpp: tileLoad() calls that read data
+
+void cache1d::misterLog(void)
+{
+    static int enabled = -1;
+    static uint32_t last;
+    if (enabled < 0)
+    {
+        char const *env = getenv("MISTER_HYBRID_CACHELOG");
+        enabled = env ? atoi(env) != 0 : 0;
+    }
+    if (!enabled)
+        return;
+    uint32_t now = timerGetTicks();
+    if (now - last < 2000)
+        return;
+    last = now;
+
+    int64_t lockedBytes = 0, unlockedBytes = 0, freeBytes = 0, biggestFree = 0;
+    int locked = 0, unlocked = 0, freeb = 0;
+    for (int i = 0; i < m_numBlocks; i++)
+    {
+        unsigned char const l = *m_index[i].lock;
+        int32_t const len = m_index[i].leng;
+        if (l == 0 || l == 1) { freeb++; freeBytes += len; if (len > biggestFree) biggestFree = len; }
+        else if (l >= CACHE1D_LOCKED) { locked++; lockedBytes += len; }
+        else { unlocked++; unlockedBytes += len; }
+    }
+    LOG_F(INFO, "mister: cache %d MB: locked %d blocks %d MB, unlocked %d blocks %d MB, free %d blocks %d MB (largest %d KB); %d tile loads, %d allocations in 2 s",
+          m_totalSize >> 20, locked, (int)(lockedBytes >> 20), unlocked, (int)(unlockedBytes >> 20), freeb, (int)(freeBytes >> 20), (int)(biggestFree >> 10),
+          g_misterTileLoads, misterAllocs);
+    g_misterTileLoads = 0;
+    misterAllocs = 0;
+}
+#endif
+
 void cache1d::ageBlocks(void)
 {
     MISTER_IO_GUARD;
+#ifdef MISTER_HYBRID
+    misterLog();
+#endif
     static int agecount;
 
     if (agecount >= m_numBlocks)

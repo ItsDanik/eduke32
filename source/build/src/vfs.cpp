@@ -561,6 +561,17 @@ int32_t cache1d_file_fromzip(buildvfs_kfd fil)
 {
     return (filegrp[fil] == GRP_ZIP);
 }
+
+#ifdef MISTER_HYBRID
+int32_t cache1d_file_deflated(buildvfs_kfd fil)
+{
+    if (filegrp[fil] != GRP_ZIP)
+        return 0;
+    // make the handle the one kplib has open, then ask kplib
+    klseek(fil, 0, BSEEK_CUR);
+    return kzfs.comptyp != 0;
+}
+#endif
 #endif
 
 static int32_t kopen_internal(const char *filename, char **lastpfn, char searchfirst, char checkcase, char tryzip, int32_t newhandle, uint8_t *arraygrp, intptr_t *arrayhan, int32_t *arraypos);
