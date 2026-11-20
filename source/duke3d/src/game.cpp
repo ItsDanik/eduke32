@@ -1412,7 +1412,16 @@ void G_DrawRooms(int32_t playerNum, int32_t smoothRatio)
                     tiltZoom = tiltZoom * ydim / 200;
 #endif
 
+#ifdef MISTER_HYBRID
+                // MiSTer: the rolled view over the whole screen as on a PC (engine.cpp
+                // dorotspr_handle_bit2), not scaled like HUD art (it covered half the screen)
+                extern int32_t mister2DClassic;
+                mister2DClassic = 1;
+#endif
                 rotatesprite_win(160 << 16, 100 << 16, tiltZoom, tang + 512, TILE_TILT, 0, 0, 4 + 2 + 64 + 1024);
+#ifdef MISTER_HYBRID
+                mister2DClassic = 0;
+#endif
                 walock[TILE_TILT] = CACHE1D_FREE;
             }
         }

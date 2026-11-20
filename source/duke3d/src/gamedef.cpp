@@ -422,6 +422,7 @@ static tokenmap_t const vm_keywords[] =
     { "nextspritesect",         CON_NEXTSPRITESECT },
     { "nextspritestat",         CON_NEXTSPRITESTAT },
     { "nullop",                 CON_NULLOP },
+    { "quitgame",               CON_QUITGAME },   // MiSTer: Electric Highways (its 2015 engine had it)
     { "onevent",                CON_ONEVENT },
     { "operate",                CON_OPERATE },
     { "operateactivators",      CON_OPERATEACTIVATORS },
@@ -6283,6 +6284,7 @@ repeatcase:
         case CON_TIP:
         case CON_TOSSWEAPON:
         case CON_WACKPLAYER:
+        case CON_QUITGAME:
             continue;
 
         case CON_NULLOP:

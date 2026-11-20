@@ -979,6 +979,7 @@ memberlabel_t const UserdefsLabels[]=
     { "m_coop",                 USERDEFS_M_COOP,                 0, 0, -1 },
     { "coop",                   USERDEFS_COOP,                   0, 0, -1 },
     { "screen_size",            USERDEFS_SCREEN_SIZE,            0, 0, -1 },
+    { "esc_key",                USERDEFS_ESC_KEY,                0, 0, -1 },
     { "lockout",                USERDEFS_LOCKOUT,                0, 0, -1 },
     { "crosshair",              USERDEFS_CROSSHAIR,              0, 0, -1 },
     { "playerai",               USERDEFS_PLAYERAI,               0, 0, -1 },
@@ -1184,6 +1185,7 @@ int32_t __fastcall VM_GetUserdef(int32_t labelNum, int const lParm2)
         case USERDEFS_M_COOP:                 labelNum = ud.m_coop;                       break;
         case USERDEFS_COOP:                   labelNum = ud.coop;                         break;
         case USERDEFS_SCREEN_SIZE:            labelNum = ud.screen_size;                  break;
+        case USERDEFS_ESC_KEY:                { extern int32_t misterEscKey; labelNum = misterEscKey; } break;
         case USERDEFS_LOCKOUT:                labelNum = ud.lockout;                      break;
         case USERDEFS_CROSSHAIR:              labelNum = ud.crosshair;                    break;
         case USERDEFS_PLAYERAI:               labelNum = ud.playerai;                     break;

@@ -2041,6 +2041,15 @@ namespace loguru
 		write_to_stderr("Caught signal: ");
 		write_to_stderr(signal_name);
 		write_to_stderr("\n");
+#if defined(MISTER_HYBRID) && LOGURU_STACKTRACES
+		// MiSTer: the return addresses, for addr2line against the unstripped build
+		{
+			void* bt[48];
+			int const n = backtrace(bt, 48);
+			write_to_stderr("Backtrace (addr2line -e eduke32.debug -f -C):\n");
+			backtrace_symbols_fd(bt, n, 2);
+		}
+#endif
 		if (g_colorlogtostderr && s_terminal_has_color) {
 			write_to_stderr(terminal_reset());
 		}

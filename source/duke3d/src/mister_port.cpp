@@ -214,7 +214,7 @@ static void UpdateCheats(void)
         option.last = on;
         if (on == CheatOn(option.cheat) || (!on && !changed))
             continue;
-        if (!FURY && ud.player_skill == 4)
+        if (G_CheatsRefused())
         {
             // none at Damn I'm Good
             if (changed)
@@ -249,7 +249,7 @@ static void UpdateCheats(void)
         Cheat(CHEAT_KEYS);
     if (triggers & TRIG_NEXTLEVEL)
     {
-        if (!FURY && ud.player_skill == 4)
+        if (G_CheatsRefused())
             P_DoQuote(QUOTE_CHEATS_DISABLED, pPlayer);
         else
             NextLevel(pPlayer);
@@ -368,6 +368,37 @@ static const MiSTerGame Games[] = {
       "A.W.O.L. was not found. Copy awol.grp from the game's folder to %s/, with the "
       "awol.grpinfo of the add-on.",
       { (int32_t)0xDA99945F } },
+    // Electric Highways (Zykov Eddy, 2015, free): the game's Data folder as it comes
+    // (data.grp with the music, the CONs, duke3d.def, its own ART and map), with the
+    // add-on's ehighways.grpinfo next to data.grp
+    { "EHIGHWAYS", "Electric Highways", NULL,
+      "Electric Highways was not found. Copy everything in the game's Data folder "
+      "(data.grp, the CON files, duke3d.def, TILES*.ART, Texture, Sounds, scene.map) to %s/.",
+      { (int32_t)0xAD3328BD } },
+    // Borg Nukem (Kef_Nukem and 4of10, 2002, free): BORG3D.GRP is the whole game (its own
+    // ART, palette, sounds, music and maps), with the add-on's borgnukem.grpinfo next to it
+    { "BORGNUKEM", "Borg Nukem", NULL,
+      "Borg Nukem was not found. Copy BORG3D.GRP from the game's BN folder to %s/, with the "
+      "borgnukem.grpinfo of the add-on.",
+      { (int32_t)0x33153FD9 } },
+    // Extreme Paintbrawl (Creative Carnage, 1998): PAINTB.GRP from the game's engine folder,
+    // with the add-on's paintbrawl.grpinfo next to it (PAINT.CON is the script)
+    { "PAINTBRAWL", "Extreme Paintbrawl", NULL,
+      "Extreme Paintbrawl was not found. Copy PAINTB.GRP from the game's engine folder to %s/, "
+      "with the paintbrawl.grpinfo of the add-on.",
+      { (int32_t)0xB44A89DE } },
+    // Plunder & Pillage (Petrilla Enterprises, 2001, free demo): PIRATE.GRP from the game's
+    // folder with the v1.01b update's maps and USER.CON next to it, and the add-on's grpinfo
+    { "PLUNDER", "Plunder & Pillage", NULL,
+      "Plunder & Pillage was not found. Copy PIRATE.GRP from the game's folder to %s/, with "
+      "the plunder.grpinfo of the add-on.",
+      { (int32_t)0x01A4C223 } },
+    // Age of Evil (a Duke 3D Atomic total conversion): AGEOFEVIL.GRP packed from the game's
+    // files by the add-on's build-tools/pack_grp.py, with the add-on's ageofevil.grpinfo
+    { "AGEOFEVIL", "Age of Evil", NULL,
+      "Age of Evil was not found. Build AGEOFEVIL.GRP from the game's files with the add-on's "
+      "pack_grp.py and copy it to %s/, with the ageofevil.grpinfo of the add-on.",
+      { (int32_t)0xE1F82069 } },
 };
 #define NUM_GAMES ARRAY_SSIZE(Games)
 #define NO_GAME "No game data found. Copy DUKE3D.GRP of Duke Nukem 3D (the full game or " \
@@ -379,8 +410,75 @@ static const MiSTerGame Games[] = {
 
 #define MAX_GAMES 16
 
+// ---- Where a crash happened ----
+// backtrace() in a signal handler stops at the signal frame on ARM: this prints the
+// faulting pc, lr and sp from the signal context (addr2line -e eduke32.debug -f -C -i)
+// and hands the signal on to the default action (the launcher reports the exit code).
+#include <signal.h>
+#include <ucontext.h>
+#include <unistd.h>
+static void misterCrashHex(char *p, unsigned long v)
+{
+    static const char hex[] = "0123456789abcdef";
+    for (int i = 7; i >= 0; i--) { p[i] = hex[v & 15]; v >>= 4; }
+}
+static void misterCrashHandler(int sig, siginfo_t *info, void *ctx)
+{
+    ucontext_t const *uc = (ucontext_t const *)ctx;
+    char line[] = "mister crash: SIG???? pc 0x........ lr 0x........ sp 0x........ addr 0x........\n";
+    char const *name = sig == SIGSEGV ? "SEGV" : sig == SIGFPE ? "FPE " : sig == SIGBUS ? "BUS " : sig == SIGILL ? "ILL " : "??  ";
+    memcpy(line + 17, name, 4);
+#if defined(__arm__)
+    misterCrashHex(line + 27, uc->uc_mcontext.arm_pc);
+    misterCrashHex(line + 41, uc->uc_mcontext.arm_lr);
+    misterCrashHex(line + 55, uc->uc_mcontext.arm_sp);
+#else
+    (void)uc;
+#endif
+    misterCrashHex(line + 71, (unsigned long)info->si_addr);
+    ssize_t w = write(2, line, sizeof(line) - 1);
+    // the words on the stack that look like return addresses into the program (a
+    // non-PIE build: its code is below 16 MB), for addr2line; the division helpers
+    // of libgcc raise SIGFPE from inside libc, so pc and lr are in the libraries
+#if defined(__arm__)
+    {
+        unsigned long const *sp = (unsigned long const *)uc->uc_mcontext.arm_sp;
+        char word[] = "mister crash: stack 0x........\n";
+        for (int i = 0; i < 512; i++)
+        {
+            unsigned long const v = sp[i];
+            if (v >= 0x10000 && v < 0x1000000)
+            {
+                misterCrashHex(word + 22, v);
+                w = write(2, word, sizeof(word) - 1);
+            }
+        }
+    }
+#endif
+    (void)w;
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+void MiSTer_InstallCrashHandler(void)
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = misterCrashHandler;
+    sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGFPE, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+    sigaction(SIGILL, &sa, NULL);
+}
+
+// the id of the game picked (Games[].id, "" for one of the list by its GRP), for the
+// games the engine treats specially; esc_key for Electric Highways (see screens.cpp)
+char misterPickedId[32];
+int32_t misterEscKey;
+
 grpfile_t const *MiSTer_SelectGroup(void)
 {
+    MiSTer_InstallCrashHandler();   // after the logger installed its own: ours runs first
     mh_game games[MAX_GAMES];
     grpfile_t const *of[MAX_GAMES];
     static const char *files[MAX_GAMES][2];
@@ -477,6 +575,7 @@ grpfile_t const *MiSTer_SelectGroup(void)
     }
     // the game's logo and the lines under it ("Loading <name>..." the last)
     // come with the pick (MH_GameLogo(), host version 17)
+    Bstrncpyz(misterPickedId, pick < entries ? games[pick].id : "", sizeof(misterPickedId));
     return of[pick];
 }
 

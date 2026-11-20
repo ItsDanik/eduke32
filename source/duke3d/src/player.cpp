@@ -3258,6 +3258,24 @@ void P_GetInput(int const playerNum)
 
     CONTROL_GetInput(&info);
 
+#ifdef MISTER_HYBRID
+    // MISTER_HYBRID_PADLOG=1: every game function edge, by name (the pad test)
+    {
+        static int misterPadLog = -1;
+        if (misterPadLog < 0)
+            misterPadLog = getenv("MISTER_HYBRID_PADLOG") ? atoi(getenv("MISTER_HYBRID_PADLOG")) : 0;
+        if (misterPadLog)
+        {
+            static uint64_t misterLastButtons;
+            uint64_t const misterChanged = CONTROL_ButtonState ^ misterLastButtons;
+            for (int f = 0; f < NUMGAMEFUNCTIONS; f++)
+                if (misterChanged & ((uint64_t)1 << f))
+                    LOG_F(INFO, "mister pad: gamefunc_%s %s", gamefunctions[f], BUTTON(f) ? "down" : "up");
+            misterLastButtons = CONTROL_ButtonState;
+        }
+    }
+#endif
+
     if (ud.config.MouseBias)
     {
         if (klabs(info.mousex) > klabs(info.mousey))

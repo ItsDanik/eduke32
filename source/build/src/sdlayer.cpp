@@ -2791,6 +2791,17 @@ void handleevents_updatemousestate(uint8_t state)
 //   returns !0 if there was an important event worth checking (like quitting)
 //
 
+#ifdef MISTER_HYBRID
+// MISTER_HYBRID_PADLOG=1: log every joystick button and trigger edge (the pad test)
+static int misterPadLog(void)
+{
+    static int on = -1;
+    if (on < 0)
+        on = getenv("MISTER_HYBRID_PADLOG") ? atoi(getenv("MISTER_HYBRID_PADLOG")) : 0;
+    return on;
+}
+#endif
+
 int32_t handleevents_sdlcommon(SDL_Event *ev)
 {
     switch (ev->type)
@@ -2900,6 +2911,19 @@ int32_t handleevents_sdlcommon(SDL_Event *ev)
             if (appactive && ev->jaxis.axis < joystick.numAxes)
             {
                 joystick.pAxis[ev->jaxis.axis] = ev->jaxis.value;
+#ifdef MISTER_HYBRID
+                // MISTER_HYBRID_PADLOG=1: the trigger axes (4, 5) as pressed/released, for the pad test
+                if (misterPadLog() && ev->jaxis.axis >= 4 && ev->jaxis.axis < 8)
+                {
+                    static int misterAxisDown[8];
+                    int const down = ev->jaxis.value > 16384;
+                    if (down != misterAxisDown[ev->jaxis.axis])
+                    {
+                        misterAxisDown[ev->jaxis.axis] = down;
+                        initprintf("mister pad: joystick axis %d %s\n", ev->jaxis.axis, down ? "pressed" : "released");
+                    }
+                }
+#endif
             }
             break;
 
@@ -2943,6 +2967,10 @@ int32_t handleevents_sdlcommon(SDL_Event *ev)
                     joystick.bits |= 1 << ev->jbutton.button;
                 else
                     joystick.bits &= ~(1 << ev->jbutton.button);
+#ifdef MISTER_HYBRID
+                if (misterPadLog())
+                    initprintf("mister pad: joystick button %d %s\n", ev->jbutton.button, ev->jbutton.state == SDL_PRESSED ? "down" : "up");
+#endif
 
 #ifdef GEKKO
                 if (ev->jbutton.button == 0) // WII_A

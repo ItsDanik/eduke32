@@ -678,6 +678,17 @@ void CONFIG_SetGameControllerDefaults()
     for (auto const & digitalAxis : misterAxes)
         digitalAxis.apply();
 
+    // A.W.O.L. names its own functions (awol_tokens.con): R2 aims down the sights (12,
+    // Fire stays on R) and L3 applies a bandage (35), where Duke's Fire and AutoRun were.
+    // g_gameType is known at the second CONFIG_ReadSetup, after the groups are loaded.
+    if (AWOL)
+    {
+        GameControllerDigitalAxisSetting const awolR2 = { CONTROLLER_AXIS_TRIGGERRIGHT, 1, 12 };
+        awolR2.apply();
+        GameControllerButtonSetting const awolL3 = { (GameControllerButton)MISTER_CB_L3, 35 };
+        awolL3.apply();
+    }
+
     ud.config.JoystickAimAssist     = 1;
 #ifdef MISTER_HYBRID
     ud.config.JoystickAimWeight     = 8;

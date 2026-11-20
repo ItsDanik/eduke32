@@ -27,6 +27,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define NUMCHEATCODES (int32_t) ARRAY_SIZE(CheatStrings)
 
 void G_DoCheats(void);
+int G_CheatsRefused(void); // MiSTer: the top skill's refusal, unless MISTER_HYBRID_CHEATS_ANYSKILL=1
 void G_SetupCheats(void);
 extern int g_cheatBufLen;
 

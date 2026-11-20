@@ -3760,6 +3760,11 @@ breakfor:
 
             vInstruction(CON_NULLOP): insptr++; dispatch();
 
+            vInstruction(CON_QUITGAME):   // MiSTer: Electric Highways' menu leaves the game with it
+                insptr++;
+                G_GameExit("");
+                dispatch();
+
             vInstruction(CON_ADDAMMO):
                 insptr++;
                 {

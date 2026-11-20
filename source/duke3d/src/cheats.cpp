@@ -253,6 +253,19 @@ static void end_cheat(DukePlayer_t * const pPlayer)
 int g_cheatBufLen;
 static int8_t cheatbuf[MAXCHEATLEN];
 
+// MiSTer: the game refuses the cheats at Damn I'm Good ("too good to be cheating");
+// MISTER_HYBRID_CHEATS_ANYSKILL=1 in the set's eduke32_env.sh lifts that (patch_anyskill.py)
+int G_CheatsRefused(void)
+{
+    static int anyskill = -1;
+    if (anyskill < 0)
+    {
+        char const *env = getenv("MISTER_HYBRID_CHEATS_ANYSKILL");
+        anyskill = (env && *env == '1');
+    }
+    return !FURY && ud.player_skill == 4 && !anyskill;
+}
+
 void G_DoCheats(void)
 {
     auto const pPlayer = g_player[myconnectindex].ps;
@@ -263,7 +276,7 @@ void G_DoCheats(void)
     {
         cheatNum = osdcmd_cheatsinfo_stat.cheatnum;
 
-        if (!FURY && ud.player_skill == 4)
+        if (G_CheatsRefused())
         {
             switch (cheatNum)
             {
@@ -732,7 +745,7 @@ void G_DoCheats(void)
         {
             if (pPlayer->cheat_phase == -1)
             {
-                if (!FURY && ud.player_skill == 4)
+                if (G_CheatsRefused())
                 {
                     P_DoQuote(QUOTE_CHEATS_DISABLED, pPlayer);
                     pPlayer->cheat_phase = 0;

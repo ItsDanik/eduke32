@@ -1189,6 +1189,22 @@ void G_DisplayRest(int32_t smoothratio)
         }
     }
 
+#ifdef MISTER_HYBRID
+    // Electric Highways has a menu of its own that reads getuserdef[].esc_key (1 while Esc
+    // or the core's Menu button is held): in play the key goes to the game, not to the
+    // engine's menu (the engine's menu, when it is open, still closes on Esc)
+    {
+        extern char misterPickedId[32]; extern int32_t misterEscKey;
+        if (!Bstrcmp(misterPickedId, "EHIGHWAYS") && (g_player[myconnectindex].ps->gm&MODE_MENU) != MODE_MENU)
+        {
+            misterEscKey = KB_KeyPressed(sc_Escape) ? 1 : 0;
+            if (I_EscapeTrigger())
+                I_EscapeTriggerClear();
+        }
+        else
+            misterEscKey = 0;
+    }
+#endif
     if (I_EscapeTrigger() && ud.overhead_on == 0
         && ud.show_help == 0
         && g_player[myconnectindex].ps->newowner == -1)

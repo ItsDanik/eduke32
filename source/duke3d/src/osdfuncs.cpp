@@ -39,8 +39,9 @@ float osdscale = 1.f, osdrscale = 1.f;
 #define OSD_SCALE(x) (osdscale != 1.f ? Blrintf(osdscale*(float)(x)) : (x))
 #define OSD_SCALEDIV(x) Blrintf((float)(x) * osdrscale)
 
-#define OSDCHAR_WIDTH (tilesiz[STARTALPHANUM + 'A' - '!'].x)
-#define OSDCHAR_HEIGHT (tilesiz[STARTALPHANUM + 'A' - '!'].y + 1)
+// MiSTer: a game whose ART has no 'A' of the small font (Electric Highways) divided by zero here
+#define OSDCHAR_WIDTH (tilesiz[STARTALPHANUM + 'A' - '!'].x > 0 ? tilesiz[STARTALPHANUM + 'A' - '!'].x : 8)
+#define OSDCHAR_HEIGHT (tilesiz[STARTALPHANUM + 'A' - '!'].y > 0 ? tilesiz[STARTALPHANUM + 'A' - '!'].y + 1 : 9)
 
 static inline CONSTEXPR int GAME_isspace(int ch)
 {

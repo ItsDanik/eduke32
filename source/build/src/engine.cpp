@@ -7776,6 +7776,9 @@ int32_t rotatesprite_mister_yofs;
 // set by the game around draws laid out for 200 lines while its draw_yxaspect
 // says 240 (AWOL's weapon hands, EVENT_DISPLAYWEAPON): those keep the plain aspect
 int32_t mister2DForcePlain;
+// set by the game around a 2D draw that must be laid out as on a PC (the classic
+// xdim/320 by ydim/200 of RS_AUTO): the rolled view drawn from TILE_TILT over the screen
+int32_t mister2DClassic;
 static int32_t misterRotPicnum;  // the tile of the 2D draw being placed (MISTER_HYBRID_2DLOG)
 
 // The core shows every mode 4:3 (mister.h): 2D art is drawn from 320x200 with
@@ -7850,15 +7853,20 @@ static void dorotspr_mister(int32_t *sxptr, int32_t *syptr, int32_t *z, int32_t 
     static int log2d = -1;
     if (log2d < 0)
         log2d = getenv("MISTER_HYBRID_2DLOG") ? atoi(getenv("MISTER_HYBRID_2DLOG")) : 0;
-    static int logtile = -1;
+    static int logtile = -1, logtile2 = -1;
     if (logtile < 0)
-        logtile = getenv("MISTER_HYBRID_2DLOGTILE") ? atoi(getenv("MISTER_HYBRID_2DLOGTILE")) : 0;
-    if (log2d > 0 && (logtile == 0 || misterRotPicnum == logtile || (logtile < 0 && ydim > 0)))
+    {
+        // one tile, or a range "first-last"
+        char const *env = getenv("MISTER_HYBRID_2DLOGTILE");
+        logtile = env ? atoi(env) : 0;
+        logtile2 = (env && strchr(env, '-')) ? atoi(strchr(env, '-') + 1) : logtile;
+    }
+    if (log2d > 0 && (logtile == 0 || (misterRotPicnum >= logtile && misterRotPicnum <= logtile2) || (logtile < 0 && ydim > 0)))
     {
         log2d--;
-        LOG_F(INFO, "mister 2d: tile %d in %d,%d stat %x aspect %d yofs %d vh %d vscale %d -> out %d,%d z %d (screen %dx%d, window y %d..%d)",
+        LOG_F(INFO, "mister 2d: tile %d in %d,%d stat %x aspect %d yofs %d vh %d vscale %d -> out %d,%d z %d (screen %dx%d, window y %d..%d) size %dx%d",
               misterRotPicnum, sx >> 16, sy >> 16, dastat, rotatesprite_yxaspect, rotatesprite_mister_yofs, vh, vscale,
-              *sxptr >> 16, *syptr >> 16, *z, xdim, ydim, windowxy1.y, windowxy2.y);
+              *sxptr >> 16, *syptr >> 16, *z, xdim, ydim, windowxy1.y, windowxy2.y, tilesiz[misterRotPicnum].x, tilesiz[misterRotPicnum].y);
     }
 }
 #endif
@@ -7868,7 +7876,7 @@ void dorotspr_handle_bit2(int32_t *sxptr, int32_t *syptr, int32_t *z, int32_t da
                           int32_t *ret_yxaspect, int32_t *ret_xyaspect)
 {
 #ifdef MISTER_HYBRID
-    if (MH_IsOpen())
+    if (MH_IsOpen() && !mister2DClassic)
     {
         dorotspr_mister(sxptr, syptr, z, dastat, cx1_plus_cx2, cy1_plus_cy2, ret_yxaspect, ret_xyaspect);
         return;
@@ -8145,6 +8153,55 @@ static void dorotatesprite(int32_t sx, int32_t sy, int32_t z, int16_t a, int16_t
     nrx1[1] = nrx1[0] + xv2*xsiz;
     nrx1[3] = nrx1[0] - yv2*ysiz;
     nrx1[2] = nrx1[1]+nrx1[3]-nrx1[0];
+#ifdef MISTER_HYBRID
+    // MISTER_HYBRID_2DCLAMP=first-last: a draw of a tile in the range is kept inside the clip
+    // rectangle (moved left / up when its right / bottom edge would fall past it; one wider
+    // than the rectangle is scaled down). A.W.O.L.'s comic captions, drawn larger to be read.
+    {
+        static int clampFirst = -2, clampLast = -2;
+        if (clampFirst == -2)
+        {
+            char const *env = getenv("MISTER_HYBRID_2DCLAMP");
+            clampFirst = env ? atoi(env) : -1;
+            clampLast = (env && strchr(env, '-')) ? atoi(strchr(env, '-') + 1) : clampFirst;
+        }
+        if (picnum >= clampFirst && picnum <= clampLast)
+        {
+            int32_t minx = nrx1[0], maxx = nrx1[0], miny = nry1[0], maxy = nry1[0];
+            for (int k = 1; k < 4; k++)
+            {
+                minx = min(minx, nrx1[k]); maxx = max(maxx, nrx1[k]);
+                miny = min(miny, nry1[k]); maxy = max(maxy, nry1[k]);
+            }
+            int32_t const limx = (cx2+1)<<16, limy = (cy2+1)<<16;
+            if (maxx - minx > limx - (cx1<<16) || maxy - miny > limy - (cy1<<16))
+            {
+                // wider or taller than the rectangle: scaled down to fit, about its origin
+                int32_t const fx = divscale16(limx - (cx1<<16), maxx - minx), fy = divscale16(limy - (cy1<<16), maxy - miny);
+                int32_t const f = min(fx, fy) - 256;
+                xv = mulscale16(xv, f); yv = mulscale16(yv, f); xv2 = mulscale16(xv2, f); yv2 = mulscale16(yv2, f);
+                nry1[0] = sy - (yv*xoff + xv*yoff);
+                nry1[1] = nry1[0] + yv*xsiz;
+                nry1[3] = nry1[0] + xv*ysiz;
+                nry1[2] = nry1[1]+nry1[3]-nry1[0];
+                nrx1[0] = sx - (xv2*xoff - yv2*yoff);
+                nrx1[1] = nrx1[0] + xv2*xsiz;
+                nrx1[3] = nrx1[0] - yv2*ysiz;
+                nrx1[2] = nrx1[1]+nrx1[3]-nrx1[0];
+                minx = maxx = nrx1[0]; miny = maxy = nry1[0];
+                for (int k = 1; k < 4; k++)
+                {
+                    minx = min(minx, nrx1[k]); maxx = max(maxx, nrx1[k]);
+                    miny = min(miny, nry1[k]); maxy = max(maxy, nry1[k]);
+                }
+            }
+            if (maxx > limx && minx - (maxx - limx) >= (cx1<<16))
+                for (int k = 0; k < 4; k++) nrx1[k] -= maxx - limx;
+            if (maxy > limy && miny - (maxy - limy) >= (cy1<<16))
+                for (int k = 0; k < 4; k++) nry1[k] -= maxy - limy;
+        }
+    }
+#endif
     i = (cx1<<16); if ((nrx1[0]<i) && (nrx1[1]<i) && (nrx1[2]<i) && (nrx1[3]<i)) return;
     i = (cx2<<16); if ((nrx1[0]>i) && (nrx1[1]>i) && (nrx1[2]>i) && (nrx1[3]>i)) return;
 
