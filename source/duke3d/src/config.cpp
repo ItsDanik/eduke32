@@ -645,7 +645,7 @@ void CONFIG_SetGameControllerDefaults()
 
 #ifdef MISTER_HYBRID
     // The core's joystick 1 (mister.h): its J1 buttons, the d-pad walking and
-    // turning, R2 fire and L2 the kick, L3 the run toggle and R3 the kick too.
+    // strafing, R2 fire and L2 the kick, L3 the run toggle and R3 the kick too.
     // A and B are only Menu OK and Menu Back.
     static GameControllerButtonSetting const misterButtons[] =
     {
@@ -662,8 +662,8 @@ void CONFIG_SetGameControllerDefaults()
         { (GameControllerButton)MISTER_CB_R3, gamefunc_Quick_Kick },
         { CONTROLLER_BUTTON_DPAD_UP, gamefunc_Move_Forward },
         { CONTROLLER_BUTTON_DPAD_DOWN, gamefunc_Move_Backward },
-        { CONTROLLER_BUTTON_DPAD_LEFT, gamefunc_Turn_Left },
-        { CONTROLLER_BUTTON_DPAD_RIGHT, gamefunc_Turn_Right },
+        { CONTROLLER_BUTTON_DPAD_LEFT, gamefunc_Strafe_Left },     // MiSTer: the d-pad strafes (Jess, 2026-11-19)
+        { CONTROLLER_BUTTON_DPAD_RIGHT, gamefunc_Strafe_Right },
     };
 
     static GameControllerDigitalAxisSetting const misterAxes[] =
