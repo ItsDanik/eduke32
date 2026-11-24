@@ -2314,7 +2314,11 @@ void P_DisplayWeapon(void)
                                  weaponShade, weaponBits | 4 | DRAWEAP_CENTER, weaponPal, W_KNEE2);
         }
 
-        if (!FURY && sprite[pPlayer->i].xrepeat < 40)
+        if (WW2GI && (quickKickFrame != 14 || pPlayer->last_quick_kick) && ud.drawweapon == 1)
+        {
+            // MiSTer: the knife alone, the gun is away while it plays (Jess, 2026-11-19)
+        }
+        else if (!FURY && sprite[pPlayer->i].xrepeat < 40)
         {
             static int32_t fistPos;
 
